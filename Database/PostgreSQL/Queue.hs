@@ -164,3 +164,10 @@ runCount con mName = do
                 Nothing -> query_ con q
                 Just name -> query con q' [name]
   return r
+
+delete :: Connection -> Int -> IO ()
+delete = runDelete
+
+runDelete :: Connection -> Int -> IO ()
+runDelete con i =
+  execute con "DELETE FROM queue_classic_jobs where id = ?" [i] >> return ()

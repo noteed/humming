@@ -20,6 +20,7 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdDrop
     , cmdEnqueue
     , cmdCount
+    , cmdDelete
     ]
   &= summary versionString
   &= program "humming"
@@ -44,6 +45,9 @@ data Cmd =
     -- ^ Push a job on a queue.
   | Count
     { cmdMQueueName :: Maybe String
+    }
+  | Delete
+    { cmdJobId :: Int
     }
     -- ^ Count the jobs on a queue.
   deriving (Data, Typeable)
@@ -93,6 +97,17 @@ cmdCount = Count
     &= explicit
     &= name "count"
 
+-- | Create an 'Enqueue' command.
+cmdDelete :: Cmd
+cmdDelete = Delete
+  { cmdJobId = def
+    &= explicit
+    &= name "job"
+    &= help "Job ID."
+  } &= help "Delete a job."
+    &= explicit
+    &= name "delete"
+
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
@@ -120,3 +135,6 @@ runCmd cmd = do
       Count{..} -> do
         con <- connectPostgreSQL $ pack connectionString
         Q.runCount con (fmap L.pack cmdMQueueName) >>= putStrLn . show
+      Delete{..} -> do
+        con <- connectPostgreSQL $ pack connectionString
+        Q.runDelete con cmdJobId
