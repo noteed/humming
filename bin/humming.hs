@@ -3,8 +3,10 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main (main) where
 
+import Data.Aeson (json)
+import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)
-import Data.ByteString.Lazy.Char8 ()
+import qualified Data.ByteString.Lazy.Char8 as L
 import Database.PostgreSQL.Simple
 import System.Console.CmdArgs.Implicit
 import System.Environment (getEnvironment)
@@ -34,6 +36,10 @@ data Cmd =
   | Drop
     -- ^ Drop the queue_classic table.
   | Enqueue
+    { cmdQueueName :: String
+    , cmdMethod :: String
+    , cmdArguments :: String
+    }
     -- ^ Push a job on a queue.
   deriving (Data, Typeable)
 
@@ -54,7 +60,20 @@ cmdDrop = Drop
 -- | Create an 'Enqueue' command.
 cmdEnqueue :: Cmd
 cmdEnqueue = Enqueue
-    &= help "Push a job on a queue."
+  { cmdQueueName = def
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  , cmdMethod = def
+    &= explicit
+    &= name "method"
+    &= help "Method name."
+  , cmdArguments = def
+    &= typ "JSON"
+    &= explicit
+    &= name "arguments"
+    &= help "Method arguments, in JSON."
+  } &= help "Push a job on a queue."
     &= explicit
     &= name "enqueue"
 
@@ -76,6 +95,9 @@ runCmd cmd = do
         con <- connectPostgreSQL $ pack connectionString
         Q.drop con
       Enqueue{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        let q = Q.Queue "yeah" Nothing
-        Q.enqueue con q "go" ()
+        case parse json (L.pack cmdArguments) of
+          Done _ arguments -> do
+            con <- connectPostgreSQL $ pack connectionString
+            let q = Q.Queue (L.pack cmdQueueName) Nothing
+            Q.enqueue con q (L.pack cmdMethod) arguments
+          _ -> putStrLn "The argument ain't no valid JSON."
