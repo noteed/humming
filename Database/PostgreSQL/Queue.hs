@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Database.PostgreSQL.Queue where
 
+import Data.Aeson (encode, ToJSON)
+import qualified Data.ByteString.Lazy as L
 import Database.PostgreSQL.Simple
 
 ----------------------------------------------------------------------
@@ -30,6 +33,10 @@ createFunctions con = withTransaction con $
 dropFunctions :: Connection -> IO ()
 dropFunctions con = withTransaction con $
   execute_ con dropFunctionsQuery >> return ()
+
+----------------------------------------------------------------------
+-- Setup query strings
+----------------------------------------------------------------------
 
 createTableQuery :: Query
 createTableQuery =
@@ -119,3 +126,28 @@ dropFunctionsQuery :: Query
 dropFunctionsQuery =
   "DROP FUNCTION IF EXISTS lock_head(tname varchar);\n\
   \DROP FUNCTION IF EXISTS lock_head(q_name varchar, top_boundary integer)"
+
+----------------------------------------------------------------------
+-- Queue
+----------------------------------------------------------------------
+
+data Queue = Queue
+  { queueName :: L.ByteString
+    -- ^ Queue name.
+  , queueChannel :: Maybe L.ByteString
+    -- ^ LISTEN channel for this queue.
+  }
+
+-- TODO runInsert should be Queries.insert.
+enqueue :: ToJSON a => Connection -> Queue -> L.ByteString -> a -> IO ()
+enqueue con Queue{..} method args =
+  runInsert con queueName method args queueChannel
+
+-- TODO queue_classic_jobs should be a parameter.
+runInsert :: ToJSON a =>
+  Connection -> L.ByteString -> L.ByteString -> a -> t -> IO ()
+runInsert con name method args chan = do
+  let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
+  _ <- execute con q [name, method, encode args]
+  -- notify chan
+  return ()

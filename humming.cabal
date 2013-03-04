@@ -17,7 +17,9 @@ source-repository head
   location: https://github.com/noteed/humming
 
 library
-  build-depends:       base == 4.*,
+  build-depends:       aeson == 0.6.*,
+                       base == 4.*,
+                       bytestring == 0.9.*,
                        postgresql-simple == 0.2.*
   exposed-modules:     Database.PostgreSQL.Queue
   ghc-options:         -Wall

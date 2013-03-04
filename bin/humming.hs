@@ -1,8 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 module Main (main) where
 
 import Data.ByteString.Char8 (pack)
+import Data.ByteString.Lazy.Char8 ()
 import Database.PostgreSQL.Simple
 import System.Console.CmdArgs.Implicit
 import System.Environment (getEnvironment)
@@ -14,6 +16,7 @@ main = (runCmd =<<) $ cmdArgs $
   modes
     [ cmdCreate
     , cmdDrop
+    , cmdEnqueue
     ]
   &= summary versionString
   &= program "humming"
@@ -30,6 +33,8 @@ data Cmd =
     -- ^ Create the queue_classic table.
   | Drop
     -- ^ Drop the queue_classic table.
+  | Enqueue
+    -- ^ Push a job on a queue.
   deriving (Data, Typeable)
 
 -- | Create a 'Create' command.
@@ -45,6 +50,13 @@ cmdDrop = Drop
     &= help "Drop the queue_classic table."
     &= explicit
     &= name "drop"
+
+-- | Create an 'Enqueue' command.
+cmdEnqueue :: Cmd
+cmdEnqueue = Enqueue
+    &= help "Push a job on a queue."
+    &= explicit
+    &= name "enqueue"
 
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
@@ -63,3 +75,7 @@ runCmd cmd = do
       Drop{..} -> do
         con <- connectPostgreSQL $ pack connectionString
         Q.drop con
+      Enqueue{..} -> do
+        con <- connectPostgreSQL $ pack connectionString
+        let q = Q.Queue "yeah" Nothing
+        Q.enqueue con q "go" ()
