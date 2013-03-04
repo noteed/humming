@@ -19,6 +19,7 @@ main = (runCmd =<<) $ cmdArgs $
     [ cmdCreate
     , cmdDrop
     , cmdEnqueue
+    , cmdCount
     ]
   &= summary versionString
   &= program "humming"
@@ -41,6 +42,10 @@ data Cmd =
     , cmdArguments :: String
     }
     -- ^ Push a job on a queue.
+  | Count
+    { cmdMQueueName :: Maybe String
+    }
+    -- ^ Count the jobs on a queue.
   deriving (Data, Typeable)
 
 -- | Create a 'Create' command.
@@ -77,6 +82,17 @@ cmdEnqueue = Enqueue
     &= explicit
     &= name "enqueue"
 
+-- | Create an 'Enqueue' command.
+cmdCount :: Cmd
+cmdCount = Count
+  { cmdMQueueName = def
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  } &= help "Count the jobs on a queue."
+    &= explicit
+    &= name "count"
+
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
@@ -101,3 +117,6 @@ runCmd cmd = do
             let q = Q.Queue (L.pack cmdQueueName) Nothing
             Q.enqueue con q (L.pack cmdMethod) arguments
           _ -> putStrLn "The argument ain't no valid JSON."
+      Count{..} -> do
+        con <- connectPostgreSQL $ pack connectionString
+        Q.count con (fmap L.pack cmdMQueueName) >>= putStrLn . show

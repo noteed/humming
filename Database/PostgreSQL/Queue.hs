@@ -151,3 +151,15 @@ runInsert con name method args chan = do
   _ <- execute con q [name, method, encode args]
   -- notify chan
   return ()
+
+count = runCount
+
+runCount :: Connection -> Maybe L.ByteString -> IO Int
+runCount con mName = do
+  let q = "SELECT COUNT(*) FROM queue_classic_jobs"
+      q' = "SELECT COUNT(*) FROM queue_classic_jobs \
+           \WHERE q_name = ?"
+  [Only r] <- case mName of
+                Nothing -> query_ con q
+                Just name -> query con q' [name]
+  return r
