@@ -21,6 +21,7 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdEnqueue
     , cmdCount
     , cmdDelete
+    , cmdLock
     ]
   &= summary versionString
   &= program "humming"
@@ -50,6 +51,10 @@ data Cmd =
     { cmdJobId :: Int
     }
     -- ^ Count the jobs on a queue.
+  | Lock
+    { cmdQueueName :: String
+    }
+    -- ^Try to lock a job from a queue.
   deriving (Data, Typeable)
 
 -- | Create a 'Create' command.
@@ -108,6 +113,16 @@ cmdDelete = Delete
     &= explicit
     &= name "delete"
 
+cmdLock :: Cmd
+cmdLock = Lock
+  { cmdQueueName = def
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  } &= help "Try to lock a job from a queue."
+    &= explicit
+    &= name "lock"
+
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
@@ -138,3 +153,6 @@ runCmd cmd = do
       Delete{..} -> do
         con <- connectPostgreSQL $ pack connectionString
         Q.runDelete con cmdJobId
+      Lock{..} -> do
+        con <- connectPostgreSQL $ pack connectionString
+        Q.runLock con (L.pack cmdQueueName) 10 >>= print

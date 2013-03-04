@@ -9,4 +9,6 @@
     > QC_DATABASE_URL="postgres://username:password@localhost/database" humming count \
         [--queue WOUHOU]
     > QC_DATABASE_URL="postgres://username:password@localhost/database" humming delete \
-        [--job 4]
+        --job 4
+    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming lock \
+        --queue WOUHOU

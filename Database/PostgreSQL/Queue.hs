@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Database.PostgreSQL.Queue where
 
-import Data.Aeson (encode, ToJSON)
+import Data.Aeson (decode, encode, Object, ToJSON)
 import qualified Data.ByteString.Lazy as L
 import Database.PostgreSQL.Simple
 
@@ -171,3 +171,19 @@ delete = runDelete
 runDelete :: Connection -> Int -> IO ()
 runDelete con i =
   execute con "DELETE FROM queue_classic_jobs where id = ?" [i] >> return ()
+
+deleteAll :: Connection -> Queue -> IO ()
+deleteAll = undefined -- TODO
+
+lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Maybe Object))
+lock con Queue{..} topBound = runLock con queueName topBound
+
+runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Maybe Object))
+runLock con name topBound = do
+  let q = "SELECT id, method, args FROM lock_head(?, ?)"
+  rs <- query con q (name, topBound)
+  case rs of
+    [] -> return Nothing
+    [(i, method, arguments)] ->
+      return $ Just (i, method, decode arguments)
+    _ -> error "Must not happen."
