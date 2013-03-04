@@ -152,7 +152,8 @@ runInsert con name method args chan = do
   -- notify chan
   return ()
 
-count = runCount
+count :: Connection -> Queue -> IO Int
+count con Queue{..} = runCount con (Just queueName)
 
 runCount :: Connection -> Maybe L.ByteString -> IO Int
 runCount con mName = do

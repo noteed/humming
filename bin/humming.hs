@@ -119,4 +119,4 @@ runCmd cmd = do
           _ -> putStrLn "The argument ain't no valid JSON."
       Count{..} -> do
         con <- connectPostgreSQL $ pack connectionString
-        Q.count con (fmap L.pack cmdMQueueName) >>= putStrLn . show
+        Q.runCount con (fmap L.pack cmdMQueueName) >>= putStrLn . show
