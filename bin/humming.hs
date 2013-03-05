@@ -7,6 +7,7 @@ import Data.Aeson (json)
 import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)
 import qualified Data.ByteString.Lazy.Char8 as L
+import Data.IORef (newIORef)
 import Database.PostgreSQL.Simple
 import System.Console.CmdArgs.Implicit
 import System.Environment (getEnvironment)
@@ -22,6 +23,8 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdCount
     , cmdDelete
     , cmdLock
+      -- TODO The `humming` executable has no idea of the kind of worker we want.
+    , cmdWork
     ]
   &= summary versionString
   &= program "humming"
@@ -54,7 +57,11 @@ data Cmd =
   | Lock
     { cmdQueueName :: String
     }
-    -- ^Try to lock a job from a queue.
+    -- ^ Try to lock a job from a queue.
+  | Work
+    { cmdQueueName :: String
+    }
+    -- ^ TODO
   deriving (Data, Typeable)
 
 -- | Create a 'Create' command.
@@ -123,6 +130,16 @@ cmdLock = Lock
     &= explicit
     &= name "lock"
 
+cmdWork :: Cmd
+cmdWork = Work
+  { cmdQueueName = def
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  } &= help "TODO a worker, just to try."
+    &= explicit
+    &= name "work"
+
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
@@ -156,3 +173,9 @@ runCmd cmd = do
       Lock{..} -> do
         con <- connectPostgreSQL $ pack connectionString
         Q.runLock con (L.pack cmdQueueName) 10 >>= print
+      Work{..} -> do
+        con <- connectPostgreSQL $ pack connectionString
+        t <- newIORef True
+        let q = Q.Queue (L.pack cmdQueueName) Nothing
+            w = Q.Worker q 10 False 5 t [("print", print)]
+        Q.start con w

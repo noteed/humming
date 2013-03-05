@@ -2,8 +2,10 @@
 {-# LANGUAGE RecordWildCards #-}
 module Database.PostgreSQL.Queue where
 
+import Control.Monad (when)
 import Data.Aeson (decode, encode, Object, ToJSON)
 import qualified Data.ByteString.Lazy as L
+import Data.IORef (IORef, readIORef)
 import Database.PostgreSQL.Simple
 
 ----------------------------------------------------------------------
@@ -175,15 +177,60 @@ runDelete con i =
 deleteAll :: Connection -> Queue -> IO ()
 deleteAll = undefined -- TODO
 
-lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Maybe Object))
+lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Object))
 lock con Queue{..} topBound = runLock con queueName topBound
 
-runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Maybe Object))
+runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Object))
 runLock con name topBound = do
   let q = "SELECT id, method, args FROM lock_head(?, ?)"
   rs <- query con q (name, topBound)
   case rs of
     [] -> return Nothing
     [(i, method, arguments)] ->
-      return $ Just (i, method, decode arguments)
+      case decode arguments of
+        Nothing -> putStrLn "Can't decode arguments" >> return Nothing --TODO
+        Just as ->  return $ Just (i, method, as)
     _ -> error "Must not happen."
+
+----------------------------------------------------------------------
+-- Worker
+----------------------------------------------------------------------
+
+data Worker = Worker
+  { workerQueue :: Queue
+    -- ^ The queue the worker handles.
+  , workerTopBound :: Int
+  , workerFork :: Bool
+    -- ^ Should the worker fork before handling a job ?
+  , workerMaxAttempts :: Int
+  , workerIsRunning :: IORef Bool
+  , workerDispatch :: [(L.ByteString, Object -> IO ())]
+  }
+
+start :: Connection -> Worker -> IO ()
+start con w@Worker{..} = do
+  work con w
+  continue <- readIORef workerIsRunning
+  when continue $ start con w
+
+work :: Connection -> Worker -> IO ()
+work con w@Worker{..} = do
+  mjob <- lockJob con w
+  case mjob of
+    Nothing -> return ()
+    Just job -> process con w job
+
+lockJob :: Connection -> Worker -> IO (Maybe (Int, L.ByteString, Object))
+lockJob con Worker{..} = lock con workerQueue workerTopBound
+
+-- TODO handle failure, make sure `delete` is called.
+-- TODO If the worker can't handle the method, consider it as a failure ?
+--      Or make the worker lock the correct queue *and* the correct methods ?
+process :: Connection -> Worker -> (Int, L.ByteString, Object) -> IO ()
+process con w job@(i, _, _) = call w job >> delete con i
+
+call :: Worker -> (Int, L.ByteString, Object) -> IO ()
+call Worker{..} (_, method, arguments) = case lookup method workerDispatch of
+  -- TODO
+  Nothing -> putStrLn $ "Error: this worker can't handle the method " ++ show method
+  Just handler -> handler arguments
