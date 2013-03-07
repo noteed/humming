@@ -6,18 +6,25 @@ port of the Ruby
 
 ## Example usage
 
-    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming create
-    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming drop
-    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming enqueue \
-        --queue WOUHOU --method play --arguments '{}'
-    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming count \
-        [--queue WOUHOU]
-    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming delete \
+A `humming` executable is provided. Unlike the original `queue_classic`, both
+the `humming` executable and Haskell library don't use environment variables.
+
+    > humming create  --database-url postgres://username:password@localhost/database
+    > humming drop    --database-url postgres://username:password@localhost/database
+    > humming enqueue --database-url postgres://username:password@localhost/database \
+        --queue FOO --method play --arguments '{}'
+    > humming count   --database-url postgres://username:password@localhost/database \
+        [--queue FOO]
+    > humming delete  --database-url postgres://username:password@localhost/database \
         --job 4
-    > QC_DATABASE_URL="postgres://username:password@localhost/database" humming lock \
-        --queue WOUHOU
+    > humming lock    --database-url postgres://username:password@localhost/database \
+        --queue FOO
+    > humming work    --database-url postgres://username:password@localhost/database \
+        --queue FOO
 
 ## Limitations
 
+- It should be possible to pass --database-url value via a file.
 - Workers poll for jobs without using PostgreSQL's LISTEN/NOTIFY.
 - The table holding the jobs is hard-coded to `queue_classic_jobs`.
+- Not much logging is done (and actually only stdout is used).

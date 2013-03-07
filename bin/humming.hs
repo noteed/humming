@@ -11,7 +11,6 @@ import Data.Version (showVersion)
 import Database.PostgreSQL.Simple
 import Paths_humming (version)
 import System.Console.CmdArgs.Implicit
-import System.Environment (getEnvironment)
 
 import qualified Database.PostgreSQL.Queue as Q
 
@@ -37,28 +36,37 @@ versionString =
 -- | Data type representing the different command-line subcommands.
 data Cmd =
     Create
-    -- ^ Create the queue_classic table.
+    { cmdDatabaseUrl :: String
+    }
+    -- ^ Create the queue_classic_jobs table.
   | Drop
-    -- ^ Drop the queue_classic table.
+    { cmdDatabaseUrl :: String
+    }
+    -- ^ Drop the queue_classic_jobs table.
   | Enqueue
-    { cmdQueueName :: String
+    { cmdDatabaseUrl :: String
+    , cmdQueueName :: String
     , cmdMethod :: String
     , cmdArguments :: String
     }
     -- ^ Push a job on a queue.
   | Count
-    { cmdMQueueName :: Maybe String
+    { cmdDatabaseUrl :: String
+    , cmdMQueueName :: Maybe String
     }
   | Delete
-    { cmdJobId :: Int
+    { cmdDatabaseUrl :: String
+    , cmdJobId :: Int
     }
     -- ^ Count the jobs on a queue.
   | Lock
-    { cmdQueueName :: String
+    { cmdDatabaseUrl :: String
+    , cmdQueueName :: String
     }
     -- ^ Try to lock a job from a queue.
   | Work
-    { cmdQueueName :: String
+    { cmdDatabaseUrl :: String
+    , cmdQueueName :: String
     }
     -- ^ TODO
   deriving (Data, Typeable)
@@ -66,21 +74,33 @@ data Cmd =
 -- | Create a 'Create' command.
 cmdCreate :: Cmd
 cmdCreate = Create
-    &= help "Create the queue_classic_jobs table."
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  } &= help "Create the queue_classic_jobs table."
     &= explicit
     &= name "create"
 
 -- | Create a 'Drop' command.
 cmdDrop :: Cmd
 cmdDrop = Drop
-    &= help "Drop the queue_classic_jobs table."
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  } &= help "Drop the queue_classic_jobs table."
     &= explicit
     &= name "drop"
 
 -- | Create an 'Enqueue' command.
 cmdEnqueue :: Cmd
 cmdEnqueue = Enqueue
-  { cmdQueueName = "default"
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdQueueName = "default"
     &= explicit
     &= name "queue"
     &= help "Queue name."
@@ -100,7 +120,11 @@ cmdEnqueue = Enqueue
 -- | Create a 'Count' command.
 cmdCount :: Cmd
 cmdCount = Count
-  { cmdMQueueName = def
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdMQueueName = def
     &= explicit
     &= name "queue"
     &= help "Queue name."
@@ -111,7 +135,11 @@ cmdCount = Count
 -- | Create a 'Delete' command.
 cmdDelete :: Cmd
 cmdDelete = Delete
-  { cmdJobId = def
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdJobId = def
     &= explicit
     &= name "job"
     &= help "Job ID."
@@ -122,7 +150,11 @@ cmdDelete = Delete
 -- | Create a 'Lock' command.
 cmdLock :: Cmd
 cmdLock = Lock
-  { cmdQueueName = "default"
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdQueueName = "default"
     &= explicit
     &= name "queue"
     &= help "Queue name."
@@ -133,7 +165,11 @@ cmdLock = Lock
 -- | Create a 'Work' command.
 cmdWork :: Cmd
 cmdWork = Work
-  { cmdQueueName = "default"
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdQueueName = "default"
     &= explicit
     &= name "queue"
     &= help "Queue name."
@@ -144,37 +180,25 @@ cmdWork = Work
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
-  env <- getEnvironment
-  let mConString = lookup "QC_DATABASE_URL" env
-      mConString' = maybe (lookup "DATABASE_URL" env) Just mConString
-  case mConString' of
-    Nothing -> putStrLn $ "The QC_DATABASE_URL or DATABASE_URL "
-      ++ "environment variable must be defined."
-
-    Just connectionString -> case cmd of
-      Create{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        Q.create con
-      Drop{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        Q.drop con
-      Enqueue{..} -> do
-        case parse json (L.pack cmdArguments) of
-          Done _ arguments -> do
-            con <- connectPostgreSQL $ pack connectionString
-            let q = Q.Queue (L.pack cmdQueueName) Nothing
-            Q.enqueue con q (L.pack cmdMethod) arguments
-          _ -> putStrLn "The argument ain't no valid JSON."
-      Count{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        Q.runCount con (fmap L.pack cmdMQueueName) >>= putStrLn . show
-      Delete{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        Q.runDelete con cmdJobId
-      Lock{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        Q.runLock con (L.pack cmdQueueName) 10 >>= print
-      Work{..} -> do
-        con <- connectPostgreSQL $ pack connectionString
-        w <- Q.defaultWorker
-        Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) Nothing }
+  con <- connectPostgreSQL . pack $ cmdDatabaseUrl cmd
+  -- TODO execute "SET application_name = 'humming'"
+  case cmd of
+    Create{..} -> do
+      Q.create con
+    Drop{..} -> do
+      Q.drop con
+    Enqueue{..} -> do
+      case parse json (L.pack cmdArguments) of
+        Done _ arguments -> do
+          let q = Q.Queue (L.pack cmdQueueName) Nothing
+          Q.enqueue con q (L.pack cmdMethod) arguments
+        _ -> putStrLn "The argument ain't no valid JSON."
+    Count{..} -> do
+      Q.runCount con (fmap L.pack cmdMQueueName) >>= putStrLn . show
+    Delete{..} -> do
+      Q.runDelete con cmdJobId
+    Lock{..} -> do
+      Q.runLock con (L.pack cmdQueueName) 10 >>= print
+    Work{..} -> do
+      w <- Q.defaultWorker
+      Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) Nothing }
