@@ -2,6 +2,9 @@
 {-# LANGUAGE RecordWildCards #-}
 module Database.PostgreSQL.Queue where
 
+import Prelude hiding (catch)
+
+import Control.Exception (SomeException, catch)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Data.Aeson (decode, encode, Object, ToJSON)
@@ -247,9 +250,16 @@ lockJob con w@Worker{..} attempt = do
           lockJob con w $ succ attempt
         else return Nothing
 
--- TODO handle failure, make sure `delete` is called.
 process :: Connection -> Worker -> (Int, L.ByteString, Object) -> IO ()
-process con w job@(i, _, _) = call w job >> delete con i
+process con w job@(i, method, arguments) =
+  catch (call w job) handleException >> delete con i
+  where
+  handleException :: SomeException -> IO ()
+  handleException e = do
+    putStrLn $ "An exception occured while processing the job #" ++ show i ++ "."
+    putStrLn $ "  - method: " ++ show method
+    putStrLn $ "  - argument: " ++ show arguments
+    putStrLn $ "  - exception: " ++ show e
 
 call :: Worker -> (Int, L.ByteString, Object) -> IO ()
 call Worker{..} (_, method, arguments) = workerHandler method arguments
