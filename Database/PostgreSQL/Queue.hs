@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Database.PostgreSQL.Queue where
 
+import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Data.Aeson (decode, encode, Object, ToJSON)
 import qualified Data.ByteString.Lazy as L
@@ -215,13 +216,23 @@ start con w@Worker{..} = do
 
 work :: Connection -> Worker -> IO ()
 work con w@Worker{..} = do
-  mjob <- lockJob con w
+  mjob <- lockJob con w 0
   case mjob of
     Nothing -> return ()
     Just job -> process con w job
 
-lockJob :: Connection -> Worker -> IO (Maybe (Int, L.ByteString, Object))
-lockJob con Worker{..} = lock con workerQueue workerTopBound
+lockJob :: Connection -> Worker -> Int -> IO (Maybe (Int, L.ByteString, Object))
+lockJob con w@Worker{..} attempt = do
+  mjob <- lock con workerQueue workerTopBound
+  case mjob of
+    Just _ -> return mjob
+    Nothing -> do
+      if attempt < workerMaxAttempts
+        then do
+          putStrLn $ "Attempt #" ++ show attempt
+          threadDelay ((2 ^ attempt) * 1000000)
+          lockJob con w $ succ attempt
+        else return Nothing
 
 -- TODO handle failure, make sure `delete` is called.
 -- TODO If the worker can't handle the method, consider it as a failure ?
