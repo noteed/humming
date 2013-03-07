@@ -7,7 +7,6 @@ import Data.Aeson (json)
 import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)
 import qualified Data.ByteString.Lazy.Char8 as L
-import Data.IORef (newIORef)
 import Database.PostgreSQL.Simple
 import System.Console.CmdArgs.Implicit
 import System.Environment (getEnvironment)
@@ -81,7 +80,7 @@ cmdDrop = Drop
 -- | Create an 'Enqueue' command.
 cmdEnqueue :: Cmd
 cmdEnqueue = Enqueue
-  { cmdQueueName = def
+  { cmdQueueName = "default"
     &= explicit
     &= name "queue"
     &= help "Queue name."
@@ -98,7 +97,7 @@ cmdEnqueue = Enqueue
     &= explicit
     &= name "enqueue"
 
--- | Create an 'Enqueue' command.
+-- | Create a 'Count' command.
 cmdCount :: Cmd
 cmdCount = Count
   { cmdMQueueName = def
@@ -109,7 +108,7 @@ cmdCount = Count
     &= explicit
     &= name "count"
 
--- | Create an 'Enqueue' command.
+-- | Create a 'Delete' command.
 cmdDelete :: Cmd
 cmdDelete = Delete
   { cmdJobId = def
@@ -120,9 +119,10 @@ cmdDelete = Delete
     &= explicit
     &= name "delete"
 
+-- | Create a 'Lock' command.
 cmdLock :: Cmd
 cmdLock = Lock
-  { cmdQueueName = def
+  { cmdQueueName = "default"
     &= explicit
     &= name "queue"
     &= help "Queue name."
@@ -130,13 +130,14 @@ cmdLock = Lock
     &= explicit
     &= name "lock"
 
+-- | Create a 'Work' command.
 cmdWork :: Cmd
 cmdWork = Work
-  { cmdQueueName = def
+  { cmdQueueName = "default"
     &= explicit
     &= name "queue"
     &= help "Queue name."
-  } &= help "TODO a worker, just to try."
+  } &= help "A dummy worker; it prints to stdout the job method and arguments."
     &= explicit
     &= name "work"
 
@@ -175,7 +176,5 @@ runCmd cmd = do
         Q.runLock con (L.pack cmdQueueName) 10 >>= print
       Work{..} -> do
         con <- connectPostgreSQL $ pack connectionString
-        t <- newIORef True
-        let q = Q.Queue (L.pack cmdQueueName) Nothing
-            w = Q.Worker q 10 False 5 t [("print", print)]
-        Q.start con w
+        w <- Q.defaultWorker
+        Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) Nothing }

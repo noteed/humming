@@ -5,8 +5,8 @@ module Database.PostgreSQL.Queue where
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Data.Aeson (decode, encode, Object, ToJSON)
-import qualified Data.ByteString.Lazy as L
-import Data.IORef (IORef, readIORef)
+import qualified Data.ByteString.Lazy.Char8 as L
+import Data.IORef (IORef, newIORef, readIORef)
 import Database.PostgreSQL.Simple
 
 ----------------------------------------------------------------------
@@ -205,8 +205,13 @@ data Worker = Worker
     -- ^ Should the worker fork before handling a job ?
   , workerMaxAttempts :: Int
   , workerIsRunning :: IORef Bool
-  , workerDispatch :: [(L.ByteString, Object -> IO ())]
+  , workerHandler :: L.ByteString -> Object -> IO ()
   }
+
+defaultWorker :: IO Worker
+defaultWorker = do
+  t <- newIORef True
+  return $ Worker (Queue (L.pack "default") Nothing) 10 False 5 t (curry print)
 
 start :: Connection -> Worker -> IO ()
 start con w@Worker{..} = do
@@ -235,13 +240,8 @@ lockJob con w@Worker{..} attempt = do
         else return Nothing
 
 -- TODO handle failure, make sure `delete` is called.
--- TODO If the worker can't handle the method, consider it as a failure ?
---      Or make the worker lock the correct queue *and* the correct methods ?
 process :: Connection -> Worker -> (Int, L.ByteString, Object) -> IO ()
 process con w job@(i, _, _) = call w job >> delete con i
 
 call :: Worker -> (Int, L.ByteString, Object) -> IO ()
-call Worker{..} (_, method, arguments) = case lookup method workerDispatch of
-  -- TODO
-  Nothing -> putStrLn $ "Error: this worker can't handle the method " ++ show method
-  Just handler -> handler arguments
+call Worker{..} (_, method, arguments) = workerHandler method arguments
