@@ -56,7 +56,9 @@ data Cmd =
     }
   | Delete
     { cmdDatabaseUrl :: String
-    , cmdJobId :: Int
+    -- only at most one of --job and --queue can be provided.
+    , cmdMQueueName :: Maybe String
+    , cmdMJobId :: Maybe Int
     }
     -- ^ Count the jobs on a queue.
   | Lock
@@ -139,11 +141,15 @@ cmdDelete = Delete
     &= explicit
     &= name "database-url"
     &= help "Database URL."
-  , cmdJobId = def
+  , cmdMQueueName = def
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  , cmdMJobId = def
     &= explicit
     &= name "job"
     &= help "Job ID."
-  } &= help "Delete a job."
+  } &= help "Delete a job, a queue, or all jobs."
     &= explicit
     &= name "delete"
 
@@ -196,7 +202,12 @@ runCmd cmd = do
     Count{..} -> do
       Q.runCount con (fmap L.pack cmdMQueueName) >>= putStrLn . show
     Delete{..} -> do
-      Q.runDelete con cmdJobId
+      case (cmdMQueueName, cmdMJobId) of
+        (Just _, Just _) ->
+          putStrLn "Only at most one of --queue and --job can be given."
+        (Just queueName, _) -> Q.runDeleteQueue con $ L.pack queueName
+        (_, Just jobId) -> Q.runDeleteJob con jobId
+        (_, _) -> Q.runDeleteAll con
     Lock{..} -> do
       Q.runLock con (L.pack cmdQueueName) 10 >>= print
     Work{..} -> do

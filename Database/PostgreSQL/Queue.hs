@@ -146,10 +146,11 @@ enqueue con Queue{..} method args =
   runInsert con queueName method args queueChannel
 
 runInsert :: ToJSON a =>
-  Connection -> L.ByteString -> L.ByteString -> a -> t -> IO ()
-runInsert con name method args chan = do
+  Connection -> L.ByteString -> L.ByteString -> a -> Maybe L.ByteString -> IO ()
+runInsert con name method args _ = do
   let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
   _ <- execute con q [name, method, encode args]
+  -- TODO LISTEN/NOTIFY support
   -- notify chan
   return ()
 
@@ -167,14 +168,23 @@ runCount con mName = do
   return r
 
 delete :: Connection -> Int -> IO ()
-delete = runDelete
+delete = runDeleteJob
 
-runDelete :: Connection -> Int -> IO ()
-runDelete con i =
+runDeleteJob :: Connection -> Int -> IO ()
+runDeleteJob con i =
   execute con "DELETE FROM queue_classic_jobs where id = ?" [i] >> return ()
 
-deleteAll :: Connection -> Queue -> IO ()
-deleteAll = undefined -- TODO
+deleteAll :: Connection -> Maybe Queue -> IO ()
+deleteAll con mqueue = case mqueue of
+  Just Queue{..} -> runDeleteQueue con queueName
+  Nothing -> runDeleteAll con
+
+runDeleteQueue :: Connection -> L.ByteString -> IO ()
+runDeleteQueue con name = execute con "DELETE FROM queue_classic_jobs\
+  \ WHERE q_name = ?" [name] >> return ()
+
+runDeleteAll :: Connection -> IO ()
+runDeleteAll con = execute_ con "DELETE FROM queue_classic_jobs" >> return ()
 
 lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Object))
 lock con Queue{..} topBound = runLock con queueName topBound
