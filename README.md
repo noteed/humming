@@ -12,3 +12,7 @@
         --job 4
     > QC_DATABASE_URL="postgres://username:password@localhost/database" humming lock \
         --queue WOUHOU
+
+## Limitation
+
+- The table holding the jobs is hard-coded to `queue_classic_jobs`.

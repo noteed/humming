@@ -7,7 +7,9 @@ import Data.Aeson (json)
 import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)
 import qualified Data.ByteString.Lazy.Char8 as L
+import Data.Version (showVersion)
 import Database.PostgreSQL.Simple
+import Paths_humming (version)
 import System.Console.CmdArgs.Implicit
 import System.Environment (getEnvironment)
 
@@ -22,7 +24,6 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdCount
     , cmdDelete
     , cmdLock
-      -- TODO The `humming` executable has no idea of the kind of worker we want.
     , cmdWork
     ]
   &= summary versionString
@@ -31,8 +32,7 @@ main = (runCmd =<<) $ cmdArgs $
 -- | String with the program name, version and copyright.
 versionString :: String
 versionString =
-  "humming - Copyright (c) 2013 Vo Minh Thu."
-  -- TODO add the version.
+  "humming " ++ showVersion version ++ " - Copyright (c) 2013 Vo Minh Thu."
 
 -- | Data type representing the different command-line subcommands.
 data Cmd =
@@ -66,14 +66,14 @@ data Cmd =
 -- | Create a 'Create' command.
 cmdCreate :: Cmd
 cmdCreate = Create
-    &= help "Create the queue_classic table."
+    &= help "Create the queue_classic_jobs table."
     &= explicit
     &= name "create"
 
 -- | Create a 'Drop' command.
 cmdDrop :: Cmd
 cmdDrop = Drop
-    &= help "Drop the queue_classic table."
+    &= help "Drop the queue_classic_jobs table."
     &= explicit
     &= name "drop"
 

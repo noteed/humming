@@ -141,12 +141,10 @@ data Queue = Queue
     -- ^ LISTEN channel for this queue.
   }
 
--- TODO runInsert should be Queries.insert.
 enqueue :: ToJSON a => Connection -> Queue -> L.ByteString -> a -> IO ()
 enqueue con Queue{..} method args =
   runInsert con queueName method args queueChannel
 
--- TODO queue_classic_jobs should be a parameter.
 runInsert :: ToJSON a =>
   Connection -> L.ByteString -> L.ByteString -> a -> t -> IO ()
 runInsert con name method args chan = do
