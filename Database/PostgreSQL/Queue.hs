@@ -7,7 +7,7 @@ import Prelude hiding (catch)
 import Control.Exception (SomeException, catch)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
-import Data.Aeson (decode, encode, Object, ToJSON)
+import Data.Aeson (decode, encode, ToJSON, Value)
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.IORef (IORef, newIORef, readIORef)
 import Database.PostgreSQL.Simple
@@ -189,10 +189,10 @@ runDeleteQueue con name = execute con "DELETE FROM queue_classic_jobs\
 runDeleteAll :: Connection -> IO ()
 runDeleteAll con = execute_ con "DELETE FROM queue_classic_jobs" >> return ()
 
-lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Object))
+lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Value))
 lock con Queue{..} topBound = runLock con queueName topBound
 
-runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Object))
+runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Value))
 runLock con name topBound = do
   let q = "SELECT id, method, args FROM lock_head(?, ?)"
   rs <- query con q (name, topBound)
@@ -216,7 +216,7 @@ data Worker = Worker
     -- ^ Should the worker fork before handling a job ?
   , workerMaxAttempts :: Int
   , workerIsRunning :: IORef Bool
-  , workerHandler :: L.ByteString -> Object -> IO ()
+  , workerHandler :: L.ByteString -> Value -> IO ()
   }
 
 defaultWorker :: IO Worker
@@ -237,7 +237,7 @@ work con w@Worker{..} = do
     Nothing -> return ()
     Just job -> process con w job
 
-lockJob :: Connection -> Worker -> Int -> IO (Maybe (Int, L.ByteString, Object))
+lockJob :: Connection -> Worker -> Int -> IO (Maybe (Int, L.ByteString, Value))
 lockJob con w@Worker{..} attempt = do
   mjob <- lock con workerQueue workerTopBound
   case mjob of
@@ -250,7 +250,7 @@ lockJob con w@Worker{..} attempt = do
           lockJob con w $ succ attempt
         else return Nothing
 
-process :: Connection -> Worker -> (Int, L.ByteString, Object) -> IO ()
+process :: Connection -> Worker -> (Int, L.ByteString, Value) -> IO ()
 process con w job@(i, method, arguments) =
   catch (call w job) handleException >> delete con i
   where
@@ -261,5 +261,5 @@ process con w job@(i, method, arguments) =
     putStrLn $ "  - argument: " ++ show arguments
     putStrLn $ "  - exception: " ++ show e
 
-call :: Worker -> (Int, L.ByteString, Object) -> IO ()
+call :: Worker -> (Int, L.ByteString, Value) -> IO ()
 call Worker{..} (_, method, arguments) = workerHandler method arguments
