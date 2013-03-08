@@ -24,6 +24,8 @@ the `humming` executable and Haskell library don't use environment variables.
 
 ## Limitations
 
+- Probably doesn't reconnect after a connection error.
+
 - It should be possible to pass --database-url value via a file.
 - Workers poll for jobs without using PostgreSQL's LISTEN/NOTIFY.
 - The table holding the jobs is hard-coded to `queue_classic_jobs`.
