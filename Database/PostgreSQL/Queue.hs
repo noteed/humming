@@ -245,7 +245,7 @@ lockJob con w@Worker{..} attempt = do
     Nothing -> do
       if attempt < workerMaxAttempts
         then do
-          putStrLn $ "Attempt #" ++ show attempt
+          -- putStrLn $ "Attempt #" ++ show attempt
           threadDelay ((2 ^ attempt) * 1000000)
           lockJob con w $ succ attempt
         else return Nothing
