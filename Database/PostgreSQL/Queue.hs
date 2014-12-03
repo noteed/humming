@@ -48,14 +48,25 @@ createTableQuery :: Query
 createTableQuery =
   "CREATE TABLE queue_classic_jobs (\n\
   \  id bigserial PRIMARY KEY,\n\
-  \  q_name varchar(255),\n\
-  \  method varchar(255),\n\
-  \  args text,\n\
-  \  locked_at timestamptz\n\
+  \  q_name text NOT NULL CHECK(length(q_name) > 0),\n\
+  \  method text NOT NULL CHECK(length(method) > 0),\n\
+  \  args text NOT NULL,\n\
+  \  locked_at timestamptz,\n\
+  \  locked_by integer,\n\
+  \  created_at timestamptz DEFAULT now()\n\
   \);\n\
   \\n\
   \CREATE INDEX idx_qc_on_name_only_unlocked ON \
-  \queue_classic_jobs (q_name, id) WHERE locked_at IS NULL;"
+  \queue_classic_jobs (q_name, id) WHERE locked_at IS NULL;\n\
+  \\n\
+  \do $$ begin\n\
+  \-- If json type is available, use it for the args column.\n\
+  \perform * from pg_type where typname = 'json';\n\
+  \if found then\n\
+  \  alter table queue_classic_jobs alter column args type json using (args::json);\n\
+  \end if;\n\
+  \end $$ language plpgsql;\n\
+  \"
 
 dropTableQuery :: Query
 dropTableQuery = "DROP TABLE IF EXISTS queue_classic_jobs"
@@ -78,7 +89,9 @@ createFunctionsQuery =
   \  -- for more workers. Would love to see some optimization here...\n\
   \\n\
   \  EXECUTE 'SELECT count(*) FROM '\n\
-  \    || '(SELECT * FROM queue_classic_jobs WHERE q_name = '\n\
+  \    || '(SELECT * FROM queue_classic_jobs '\n\
+  \    || ' WHERE locked_at IS NULL'\n\
+  \    || ' AND q_name = '\n\
   \    || quote_literal(q_name)\n\
   \    || ' LIMIT '\n\
   \    || quote_literal(top_boundary)\n\
@@ -113,7 +126,7 @@ createFunctionsQuery =
   \  RETURN QUERY EXECUTE 'UPDATE queue_classic_jobs '\n\
   \    || ' SET locked_at = (CURRENT_TIMESTAMP)'\n\
   \    || ' WHERE id = $1'\n\
-  \    || ' AND locked_at is NULL'\n\
+  \    || ' AND locked_at IS NULL'\n\
   \    || ' RETURNING *'\n\
   \  USING unlocked;\n\
   \\n\
@@ -126,12 +139,25 @@ createFunctionsQuery =
   \BEGIN\n\
   \  RETURN QUERY EXECUTE 'SELECT * FROM lock_head($1,10)' USING tname;\n\
   \END;\n\
-  \$$ LANGUAGE plpgsql;"
+  \$$ LANGUAGE plpgsql;\n\
+  \\n\
+  \-- queue_classic_notify function and trigger\n\
+  \create function queue_classic_notify() returns trigger as $$ begin\n\
+  \  perform pg_notify(new.q_name, '');\n\
+  \  return null;\n\
+  \end $$ language plpgsql;\n\
+  \\n\
+  \create trigger queue_classic_notify\n\
+  \after insert on queue_classic_jobs\n\
+  \for each row\n\
+  \execute procedure queue_classic_notify();\n\
+  \"
 
 dropFunctionsQuery :: Query
 dropFunctionsQuery =
   "DROP FUNCTION IF EXISTS lock_head(tname varchar);\n\
-  \DROP FUNCTION IF EXISTS lock_head(q_name varchar, top_boundary integer)"
+  \DROP FUNCTION IF EXISTS lock_head(q_name varchar, top_boundary integer);\n\
+  \DROP FUNCTION IF EXISTS queue_classic_notify() cascade;"
 
 ----------------------------------------------------------------------
 -- Queue

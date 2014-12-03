@@ -2,7 +2,9 @@
 
 Humming is a job queue implemented in Haskell on top of PostgreSQL. It is a
 port of the Ruby
-[`queue_classic`](https://github.com/ryandotsmith/queue_classic) library.
+[`queue_classic`](https://github.com/QueueClassic/queue_classic) library.
+
+**This is the development branch to bring Humming to `queue_classic` 3.0.**
 
 ## Example usage
 
@@ -30,3 +32,4 @@ the `humming` executable and Haskell library don't use environment variables.
 - Workers poll for jobs without using PostgreSQL's LISTEN/NOTIFY.
 - The table holding the jobs is hard-coded to `queue_classic_jobs`.
 - Not much logging is done (and actually only stdout is used).
+

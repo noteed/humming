@@ -1,5 +1,5 @@
 name:                humming
-version:             0.0.0
+version:             0.1.0
 Cabal-Version:       >= 1.8
 synopsis:            queue_classic in Haskell
 description:         queue_classic in Haskell
@@ -7,7 +7,7 @@ category:            Development
 license:             BSD3
 license-file:        LICENSE
 author:              Vo Minh Thu
-maintainer:          thu@hypered.be
+maintainer:          thu@hypered.io
 homepage:            http://noteed.com/humming
 bug-reports:         https://github.com/noteed/humming/issues
 build-type:          Simple
