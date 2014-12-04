@@ -23,6 +23,7 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdCount
     , cmdDelete
     , cmdLock
+    , cmdUnlockDeads
     , cmdWork
     ]
   &= summary versionString
@@ -64,6 +65,10 @@ data Cmd =
   | Lock
     { cmdDatabaseUrl :: String
     , cmdQueueName :: String
+    }
+    -- ^ Unlock jobs held by dead PostgreSQL processes.
+  | UnlockDeads
+    { cmdDatabaseUrl :: String
     }
     -- ^ Try to lock a job from a queue.
   | Work
@@ -168,6 +173,17 @@ cmdLock = Lock
     &= explicit
     &= name "lock"
 
+-- | Create an 'UnlockDeads' command.
+cmdUnlockDeads :: Cmd
+cmdUnlockDeads = UnlockDeads
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  } &= help "Unlock jobs held by dead PostgreSQL processes."
+    &= explicit
+    &= name "unlock-deads"
+
 -- | Create a 'Work' command.
 cmdWork :: Cmd
 cmdWork = Work
@@ -210,6 +226,8 @@ runCmd cmd = do
         (_, _) -> Q.runDeleteAll con
     Lock{..} -> do
       Q.runLock con (L.pack cmdQueueName) 10 >>= print
+    UnlockDeads{..} -> do
+      Q.unlockJobsOfDeadWorkers con
     Work{..} -> do
       w <- Q.defaultWorker
       Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) Nothing }

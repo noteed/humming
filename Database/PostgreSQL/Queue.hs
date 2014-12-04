@@ -65,7 +65,7 @@ createTableQuery =
   \if found then\n\
   \  alter table queue_classic_jobs alter column args type json using (args::json);\n\
   \end if;\n\
-  \end $$ language plpgsql;\n\"
+  \end $$ language plpgsql;\n\
   \ "
 
 dropTableQuery :: Query
@@ -125,7 +125,8 @@ createFunctionsQuery =
   \  END LOOP;\n\
   \\n\
   \  RETURN QUERY EXECUTE 'UPDATE queue_classic_jobs '\n\
-  \    || ' SET locked_at = (CURRENT_TIMESTAMP)'\n\
+  \    || ' SET locked_at = (CURRENT_TIMESTAMP),'\n\
+  \    || ' locked_by = (SELECT pg_backend_pid())'\n\
   \    || ' WHERE id = $1'\n\
   \    || ' AND locked_at IS NULL'\n\
   \    || ' RETURNING *'\n\
@@ -230,6 +231,15 @@ runLock con name topBound = do
         Nothing -> putStrLn "Can't decode arguments" >> return Nothing --TODO
         Just as ->  return $ Just (i, method, as)
     _ -> error "Must not happen."
+
+-- | Unlock all the jobs for which the PostgreSQL server processes no longer
+-- exist to prevent infinitely locked jobs.
+unlockJobsOfDeadWorkers :: Connection -> IO ()
+unlockJobsOfDeadWorkers con = do
+  let q = "UPDATE queue_classic_jobs SET locked_at=NULL, locked_by=NULL \
+        \WHERE locked_by NOT IN (SELECT procpid FROM pg_stat_activity)"
+  _ <- execute_ con q
+  return ()
 
 ----------------------------------------------------------------------
 -- Worker
