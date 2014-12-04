@@ -203,7 +203,7 @@ cmdWork = Work
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
   con <- connectPostgreSQL . pack $ cmdDatabaseUrl cmd
-  -- TODO execute "SET application_name = 'humming'"
+  _ <- execute_ con "SET application_name='humming'"
   case cmd of
     Create{..} -> do
       Q.create con
