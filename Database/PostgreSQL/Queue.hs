@@ -65,8 +65,8 @@ createTableQuery =
   \if found then\n\
   \  alter table queue_classic_jobs alter column args type json using (args::json);\n\
   \end if;\n\
-  \end $$ language plpgsql;\n\
-  \"
+  \end $$ language plpgsql;\n\"
+  \ "
 
 dropTableQuery :: Query
 dropTableQuery = "DROP TABLE IF EXISTS queue_classic_jobs"
@@ -77,6 +77,7 @@ createFunctionsQuery =
 -- This is ok since I am assuming that all of the users added queues will
 -- have identical columns to queue_classic_jobs.
 -- When QC supports queues with columns other than the default, we will have to change this.
+
   "CREATE OR REPLACE FUNCTION lock_head(q_name varchar, top_boundary integer)\n\
   \RETURNS SETOF queue_classic_jobs AS $$\n\
   \DECLARE\n\
@@ -151,7 +152,7 @@ createFunctionsQuery =
   \after insert on queue_classic_jobs\n\
   \for each row\n\
   \execute procedure queue_classic_notify();\n\
-  \"
+  \ "
 
 dropFunctionsQuery :: Query
 dropFunctionsQuery =
