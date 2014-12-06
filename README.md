@@ -33,4 +33,5 @@ the `humming` executable and Haskell library don't use environment variables.
 - Workers poll for jobs without using PostgreSQL's LISTEN/NOTIFY.
 - The table holding the jobs is hard-coded to `queue_classic_jobs`.
 - Not much logging is done (and actually only stdout is used).
+- Need to handle signals.
 

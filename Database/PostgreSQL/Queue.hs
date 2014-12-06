@@ -5,12 +5,14 @@ module Database.PostgreSQL.Queue where
 import Prelude hiding (catch)
 
 import Control.Exception (SomeException, catch)
-import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Data.Aeson (decode, encode, ToJSON, Value)
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.IORef (IORef, newIORef, readIORef)
 import Database.PostgreSQL.Simple
+import Database.PostgreSQL.Simple.Notification
+import Database.PostgreSQL.Simple.Types (Query(..))
 
 ----------------------------------------------------------------------
 -- Setup
@@ -168,21 +170,18 @@ dropFunctionsQuery =
 data Queue = Queue
   { queueName :: L.ByteString
     -- ^ Queue name.
-  , queueChannel :: Maybe L.ByteString
-    -- ^ LISTEN channel for this queue.
   }
 
+-- | A `NOTIFY` is automatically sent by a trigger.
 enqueue :: ToJSON a => Connection -> Queue -> L.ByteString -> a -> IO ()
 enqueue con Queue{..} method args =
-  runInsert con queueName method args queueChannel
+  runInsert con queueName method args
 
 runInsert :: ToJSON a =>
-  Connection -> L.ByteString -> L.ByteString -> a -> Maybe L.ByteString -> IO ()
-runInsert con name method args _ = do
+  Connection -> L.ByteString -> L.ByteString -> a -> IO ()
+runInsert con name method args = do
   let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
   _ <- execute con q [name, method, encode args]
-  -- TODO LISTEN/NOTIFY support
-  -- notify chan
   return ()
 
 count :: Connection -> Queue -> IO Int
@@ -241,6 +240,28 @@ unlockJobsOfDeadWorkers con = do
   _ <- execute_ con q
   return ()
 
+listenNotifications :: Connection -> String -> IO ()
+listenNotifications con name = do
+  _ <- execute_ con $ Query $ "LISTEN " `BC.append` BC.pack name
+  let loop = do
+        Notification{..} <- getNotification con
+        print (notificationPid, notificationChannel, notificationData)
+        loop
+  loop
+
+sendNotification :: Connection -> String -> IO ()
+sendNotification con name = do
+  _ <- execute_ con $ Query $ "NOTIFY " `BC.append` BC.pack name
+  return ()
+
+-- TODO Do they really build up ?
+drainNotifications :: Connection -> IO ()
+drainNotifications con = do
+  m <- getNotificationNonBlocking con
+  case m of
+    Nothing -> return ()
+    Just _ -> drainNotifications con
+
 ----------------------------------------------------------------------
 -- Worker
 ----------------------------------------------------------------------
@@ -259,7 +280,7 @@ data Worker = Worker
 defaultWorker :: IO Worker
 defaultWorker = do
   t <- newIORef True
-  return $ Worker (Queue (L.pack "default") Nothing) 10 False 5 t (curry print)
+  return $ Worker (Queue $ L.pack "default") 10 False 5 t (curry print)
 
 start :: Connection -> Worker -> IO ()
 start con w@Worker{..} = do
@@ -269,23 +290,29 @@ start con w@Worker{..} = do
 
 work :: Connection -> Worker -> IO ()
 work con w@Worker{..} = do
-  mjob <- lockJob con w 0
+  mjob <- lockJob con w
   case mjob of
     Nothing -> return ()
     Just job -> process con w job
 
-lockJob :: Connection -> Worker -> Int -> IO (Maybe (Int, L.ByteString, Value))
-lockJob con w@Worker{..} attempt = do
-  mjob <- lock con workerQueue workerTopBound
-  case mjob of
-    Just _ -> return mjob
-    Nothing -> do
-      if attempt < workerMaxAttempts
-        then do
-          -- putStrLn $ "Attempt #" ++ show attempt
-          threadDelay ((2 ^ attempt) * 1000000)
-          lockJob con w $ succ attempt
-        else return Nothing
+lockJob :: Connection -> Worker -> IO (Maybe (Int, L.ByteString, Value))
+lockJob con Worker{..} = do
+  let loop = do
+        mjob <- lock con workerQueue workerTopBound
+        case mjob of
+          Just _ -> return mjob
+          Nothing -> do
+            _ <- execute_ con $ Query $ "LISTEN " `BC.append` toStrict (queueName workerQueue)
+            -- TODO The Ruby version waits with a timeout.
+            _ <- getNotification con
+            _ <- execute_ con $ Query $ "UNLISTEN " `BC.append` toStrict (queueName workerQueue)
+            drainNotifications con
+            loop
+  loop
+
+-- TODO Use Strict ByteString directly.
+toStrict :: L.ByteString -> BC.ByteString
+toStrict = BC.concat . L.toChunks
 
 process :: Connection -> Worker -> (Int, L.ByteString, Value) -> IO ()
 process con w job@(i, method, arguments) =

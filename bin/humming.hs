@@ -24,6 +24,8 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdDelete
     , cmdLock
     , cmdUnlockDeads
+    , cmdListen
+    , cmdNotify
     , cmdWork
     ]
   &= summary versionString
@@ -69,6 +71,16 @@ data Cmd =
     -- ^ Unlock jobs held by dead PostgreSQL processes.
   | UnlockDeads
     { cmdDatabaseUrl :: String
+    }
+    -- ^ Start to listen for PostgreSQL notifications.
+  | Listen
+    { cmdDatabaseUrl :: String
+    , cmdQueueName :: String
+    }
+    -- ^ Send a notification through PostgreSQL.
+  | Notify
+    { cmdDatabaseUrl :: String
+    , cmdQueueName :: String
     }
     -- ^ Try to lock a job from a queue.
   | Work
@@ -184,6 +196,36 @@ cmdUnlockDeads = UnlockDeads
     &= explicit
     &= name "unlock-deads"
 
+-- | Create a 'Listen' command.
+cmdListen :: Cmd
+cmdListen = Listen
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdQueueName = "default"
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  } &= help "Start to listen for PostgreSQL notifications."
+    &= explicit
+    &= name "listen"
+
+-- | Create a 'Notify' command.
+cmdNotify :: Cmd
+cmdNotify = Notify
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdQueueName = "default"
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  } &= help "Send a notification through PostgreSQL."
+    &= explicit
+    &= name "notify"
+
 -- | Create a 'Work' command.
 cmdWork :: Cmd
 cmdWork = Work
@@ -212,7 +254,7 @@ runCmd cmd = do
     Enqueue{..} -> do
       case parse json (L.pack cmdArguments) of
         Done _ arguments -> do
-          let q = Q.Queue (L.pack cmdQueueName) Nothing
+          let q = Q.Queue $ L.pack cmdQueueName
           Q.enqueue con q (L.pack cmdMethod) arguments
         _ -> putStrLn "The argument ain't no valid JSON."
     Count{..} -> do
@@ -228,6 +270,10 @@ runCmd cmd = do
       Q.runLock con (L.pack cmdQueueName) 10 >>= print
     UnlockDeads{..} -> do
       Q.unlockJobsOfDeadWorkers con
+    Listen{..} -> do
+      Q.listenNotifications con cmdQueueName
+    Notify{..} -> do
+      Q.sendNotification con cmdQueueName
     Work{..} -> do
       w <- Q.defaultWorker
-      Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) Nothing }
+      Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) }
