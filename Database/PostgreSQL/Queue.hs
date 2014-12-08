@@ -168,26 +168,29 @@ dropFunctionsQuery =
 ----------------------------------------------------------------------
 
 data Queue = Queue
-  { queueName :: L.ByteString
+  { queueName :: BC.ByteString
     -- ^ Queue name.
   }
 
 -- | A `NOTIFY` is automatically sent by a trigger.
-enqueue :: ToJSON a => Connection -> Queue -> L.ByteString -> a -> IO ()
+enqueue :: ToJSON a => Connection -> Queue -> BC.ByteString -> a -> IO ()
 enqueue con Queue{..} method args =
   runInsert con queueName method args
 
 runInsert :: ToJSON a =>
-  Connection -> L.ByteString -> L.ByteString -> a -> IO ()
+  Connection -> BC.ByteString -> BC.ByteString -> a -> IO ()
 runInsert con name method args = do
   let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
-  _ <- execute con q [name, method, encode args]
+  _ <- execute con q [name, method, toStrict $ encode args]
   return ()
+
+toStrict :: L.ByteString -> BC.ByteString
+toStrict = BC.concat . L.toChunks
 
 count :: Connection -> Queue -> IO Int
 count con Queue{..} = runCount con (Just queueName)
 
-runCount :: Connection -> Maybe L.ByteString -> IO Int
+runCount :: Connection -> Maybe BC.ByteString -> IO Int
 runCount con mName = do
   let q = "SELECT COUNT(*) FROM queue_classic_jobs"
       q' = "SELECT COUNT(*) FROM queue_classic_jobs \
@@ -209,17 +212,17 @@ deleteAll con mqueue = case mqueue of
   Just Queue{..} -> runDeleteQueue con queueName
   Nothing -> runDeleteAll con
 
-runDeleteQueue :: Connection -> L.ByteString -> IO ()
+runDeleteQueue :: Connection -> BC.ByteString -> IO ()
 runDeleteQueue con name = execute con "DELETE FROM queue_classic_jobs\
   \ WHERE q_name = ?" [name] >> return ()
 
 runDeleteAll :: Connection -> IO ()
 runDeleteAll con = execute_ con "DELETE FROM queue_classic_jobs" >> return ()
 
-lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Value))
+lock :: Connection -> Queue -> Int -> IO (Maybe (Int, BC.ByteString, Value))
 lock con Queue{..} topBound = runLock con queueName topBound
 
-runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Value))
+runLock :: Connection -> BC.ByteString -> Int -> IO (Maybe (Int, BC.ByteString, Value))
 runLock con name topBound = do
   let q = "SELECT id, method, args FROM lock_head(?, ?)"
   rs <- query con q (name, topBound)
@@ -239,6 +242,11 @@ unlockJobsOfDeadWorkers con = do
         \WHERE locked_by NOT IN (SELECT procpid FROM pg_stat_activity)"
   _ <- execute_ con q
   return ()
+
+----------------------------------------------------------------------
+-- LISTEN/NOTIFY
+-- The NOTIFY is done in a trigger upon job insertion.
+----------------------------------------------------------------------
 
 listenNotifications :: Connection -> String -> IO ()
 listenNotifications con name = do
@@ -274,13 +282,13 @@ data Worker = Worker
     -- ^ Should the worker fork before handling a job ?
   , workerMaxAttempts :: Int
   , workerIsRunning :: IORef Bool
-  , workerHandler :: L.ByteString -> Value -> IO ()
+  , workerHandler :: BC.ByteString -> Value -> IO ()
   }
 
 defaultWorker :: IO Worker
 defaultWorker = do
   t <- newIORef True
-  return $ Worker (Queue $ L.pack "default") 10 False 5 t (curry print)
+  return $ Worker (Queue "default") 10 False 5 t (curry print)
 
 start :: Connection -> Worker -> IO ()
 start con w@Worker{..} = do
@@ -295,26 +303,22 @@ work con w@Worker{..} = do
     Nothing -> return ()
     Just job -> process con w job
 
-lockJob :: Connection -> Worker -> IO (Maybe (Int, L.ByteString, Value))
+lockJob :: Connection -> Worker -> IO (Maybe (Int, BC.ByteString, Value))
 lockJob con Worker{..} = do
   let loop = do
         mjob <- lock con workerQueue workerTopBound
         case mjob of
           Just _ -> return mjob
           Nothing -> do
-            _ <- execute_ con $ Query $ "LISTEN " `BC.append` toStrict (queueName workerQueue)
+            _ <- execute_ con $ Query $ "LISTEN " `BC.append` queueName workerQueue
             -- TODO The Ruby version waits with a timeout.
             _ <- getNotification con
-            _ <- execute_ con $ Query $ "UNLISTEN " `BC.append` toStrict (queueName workerQueue)
+            _ <- execute_ con $ Query $ "UNLISTEN " `BC.append` queueName workerQueue
             drainNotifications con
             loop
   loop
 
--- TODO Use Strict ByteString directly.
-toStrict :: L.ByteString -> BC.ByteString
-toStrict = BC.concat . L.toChunks
-
-process :: Connection -> Worker -> (Int, L.ByteString, Value) -> IO ()
+process :: Connection -> Worker -> (Int, BC.ByteString, Value) -> IO ()
 process con w job@(i, method, arguments) =
   catch (call w job) handleException >> delete con i
   where
@@ -325,5 +329,5 @@ process con w job@(i, method, arguments) =
     putStrLn $ "  - argument: " ++ show arguments
     putStrLn $ "  - exception: " ++ show e
 
-call :: Worker -> (Int, L.ByteString, Value) -> IO ()
+call :: Worker -> (Int, BC.ByteString, Value) -> IO ()
 call Worker{..} (_, method, arguments) = workerHandler method arguments

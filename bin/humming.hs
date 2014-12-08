@@ -86,6 +86,7 @@ data Cmd =
   | Work
     { cmdDatabaseUrl :: String
     , cmdQueueName :: String
+    , cmdWorkOnce :: Bool
     }
     -- ^ TODO
   deriving (Data, Typeable)
@@ -237,6 +238,10 @@ cmdWork = Work
     &= explicit
     &= name "queue"
     &= help "Queue name."
+  , cmdWorkOnce = def
+    &= explicit
+    &= name "once"
+    &= help "Process a single job then exit."
   } &= help "A dummy worker; it prints to stdout the job method and arguments."
     &= explicit
     &= name "work"
@@ -254,20 +259,20 @@ runCmd cmd = do
     Enqueue{..} -> do
       case parse json (L.pack cmdArguments) of
         Done _ arguments -> do
-          let q = Q.Queue $ L.pack cmdQueueName
-          Q.enqueue con q (L.pack cmdMethod) arguments
+          let q = Q.Queue $ pack cmdQueueName
+          Q.enqueue con q (pack cmdMethod) arguments
         _ -> putStrLn "The argument ain't no valid JSON."
     Count{..} -> do
-      Q.runCount con (fmap L.pack cmdMQueueName) >>= putStrLn . show
+      Q.runCount con (fmap pack cmdMQueueName) >>= putStrLn . show
     Delete{..} -> do
       case (cmdMQueueName, cmdMJobId) of
         (Just _, Just _) ->
           putStrLn "Only at most one of --queue and --job can be given."
-        (Just queueName, _) -> Q.runDeleteQueue con $ L.pack queueName
+        (Just queueName, _) -> Q.runDeleteQueue con $ pack queueName
         (_, Just jobId) -> Q.runDeleteJob con jobId
         (_, _) -> Q.runDeleteAll con
     Lock{..} -> do
-      Q.runLock con (L.pack cmdQueueName) 10 >>= print
+      Q.runLock con (pack cmdQueueName) 10 >>= print
     UnlockDeads{..} -> do
       Q.unlockJobsOfDeadWorkers con
     Listen{..} -> do
@@ -275,5 +280,8 @@ runCmd cmd = do
     Notify{..} -> do
       Q.sendNotification con cmdQueueName
     Work{..} -> do
-      w <- Q.defaultWorker
-      Q.start con w { Q.workerQueue = Q.Queue (L.pack cmdQueueName) }
+      w_ <- Q.defaultWorker
+      let w = w_ { Q.workerQueue = Q.Queue (pack cmdQueueName) }
+      if cmdWorkOnce
+        then Q.work con w
+        else Q.start con w
