@@ -5,12 +5,14 @@ module Database.PostgreSQL.Queue where
 import Prelude hiding (catch)
 
 import Control.Exception (SomeException, catch)
-import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Data.Aeson (decode, encode, ToJSON, Value)
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.IORef (IORef, newIORef, readIORef)
 import Database.PostgreSQL.Simple
+import Database.PostgreSQL.Simple.Notification
+import Database.PostgreSQL.Simple.Types (Query(..))
 
 ----------------------------------------------------------------------
 -- Setup
@@ -48,14 +50,25 @@ createTableQuery :: Query
 createTableQuery =
   "CREATE TABLE queue_classic_jobs (\n\
   \  id bigserial PRIMARY KEY,\n\
-  \  q_name varchar(255),\n\
-  \  method varchar(255),\n\
-  \  args text,\n\
-  \  locked_at timestamptz\n\
+  \  q_name text NOT NULL CHECK(length(q_name) > 0),\n\
+  \  method text NOT NULL CHECK(length(method) > 0),\n\
+  \  args text NOT NULL,\n\
+  \  locked_at timestamptz,\n\
+  \  locked_by integer,\n\
+  \  created_at timestamptz DEFAULT now()\n\
   \);\n\
   \\n\
   \CREATE INDEX idx_qc_on_name_only_unlocked ON \
-  \queue_classic_jobs (q_name, id) WHERE locked_at IS NULL;"
+  \queue_classic_jobs (q_name, id) WHERE locked_at IS NULL;\n\
+  \\n\
+  \do $$ begin\n\
+  \-- If json type is available, use it for the args column.\n\
+  \perform * from pg_type where typname = 'json';\n\
+  \if found then\n\
+  \  alter table queue_classic_jobs alter column args type json using (args::json);\n\
+  \end if;\n\
+  \end $$ language plpgsql;\n\
+  \ "
 
 dropTableQuery :: Query
 dropTableQuery = "DROP TABLE IF EXISTS queue_classic_jobs"
@@ -66,6 +79,7 @@ createFunctionsQuery =
 -- This is ok since I am assuming that all of the users added queues will
 -- have identical columns to queue_classic_jobs.
 -- When QC supports queues with columns other than the default, we will have to change this.
+
   "CREATE OR REPLACE FUNCTION lock_head(q_name varchar, top_boundary integer)\n\
   \RETURNS SETOF queue_classic_jobs AS $$\n\
   \DECLARE\n\
@@ -78,7 +92,9 @@ createFunctionsQuery =
   \  -- for more workers. Would love to see some optimization here...\n\
   \\n\
   \  EXECUTE 'SELECT count(*) FROM '\n\
-  \    || '(SELECT * FROM queue_classic_jobs WHERE q_name = '\n\
+  \    || '(SELECT * FROM queue_classic_jobs '\n\
+  \    || ' WHERE locked_at IS NULL'\n\
+  \    || ' AND q_name = '\n\
   \    || quote_literal(q_name)\n\
   \    || ' LIMIT '\n\
   \    || quote_literal(top_boundary)\n\
@@ -111,9 +127,10 @@ createFunctionsQuery =
   \  END LOOP;\n\
   \\n\
   \  RETURN QUERY EXECUTE 'UPDATE queue_classic_jobs '\n\
-  \    || ' SET locked_at = (CURRENT_TIMESTAMP)'\n\
+  \    || ' SET locked_at = (CURRENT_TIMESTAMP),'\n\
+  \    || ' locked_by = (SELECT pg_backend_pid())'\n\
   \    || ' WHERE id = $1'\n\
-  \    || ' AND locked_at is NULL'\n\
+  \    || ' AND locked_at IS NULL'\n\
   \    || ' RETURNING *'\n\
   \  USING unlocked;\n\
   \\n\
@@ -126,41 +143,54 @@ createFunctionsQuery =
   \BEGIN\n\
   \  RETURN QUERY EXECUTE 'SELECT * FROM lock_head($1,10)' USING tname;\n\
   \END;\n\
-  \$$ LANGUAGE plpgsql;"
+  \$$ LANGUAGE plpgsql;\n\
+  \\n\
+  \-- queue_classic_notify function and trigger\n\
+  \create function queue_classic_notify() returns trigger as $$ begin\n\
+  \  perform pg_notify(new.q_name, '');\n\
+  \  return null;\n\
+  \end $$ language plpgsql;\n\
+  \\n\
+  \create trigger queue_classic_notify\n\
+  \after insert on queue_classic_jobs\n\
+  \for each row\n\
+  \execute procedure queue_classic_notify();\n\
+  \ "
 
 dropFunctionsQuery :: Query
 dropFunctionsQuery =
   "DROP FUNCTION IF EXISTS lock_head(tname varchar);\n\
-  \DROP FUNCTION IF EXISTS lock_head(q_name varchar, top_boundary integer)"
+  \DROP FUNCTION IF EXISTS lock_head(q_name varchar, top_boundary integer);\n\
+  \DROP FUNCTION IF EXISTS queue_classic_notify() cascade;"
 
 ----------------------------------------------------------------------
 -- Queue
 ----------------------------------------------------------------------
 
 data Queue = Queue
-  { queueName :: L.ByteString
+  { queueName :: BC.ByteString
     -- ^ Queue name.
-  , queueChannel :: Maybe L.ByteString
-    -- ^ LISTEN channel for this queue.
   }
 
-enqueue :: ToJSON a => Connection -> Queue -> L.ByteString -> a -> IO ()
+-- | A `NOTIFY` is automatically sent by a trigger.
+enqueue :: ToJSON a => Connection -> Queue -> BC.ByteString -> a -> IO ()
 enqueue con Queue{..} method args =
-  runInsert con queueName method args queueChannel
+  runInsert con queueName method args
 
 runInsert :: ToJSON a =>
-  Connection -> L.ByteString -> L.ByteString -> a -> Maybe L.ByteString -> IO ()
-runInsert con name method args _ = do
+  Connection -> BC.ByteString -> BC.ByteString -> a -> IO ()
+runInsert con name method args = do
   let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
-  _ <- execute con q [name, method, encode args]
-  -- TODO LISTEN/NOTIFY support
-  -- notify chan
+  _ <- execute con q [name, method, toStrict $ encode args]
   return ()
+
+toStrict :: L.ByteString -> BC.ByteString
+toStrict = BC.concat . L.toChunks
 
 count :: Connection -> Queue -> IO Int
 count con Queue{..} = runCount con (Just queueName)
 
-runCount :: Connection -> Maybe L.ByteString -> IO Int
+runCount :: Connection -> Maybe BC.ByteString -> IO Int
 runCount con mName = do
   let q = "SELECT COUNT(*) FROM queue_classic_jobs"
       q' = "SELECT COUNT(*) FROM queue_classic_jobs \
@@ -182,17 +212,17 @@ deleteAll con mqueue = case mqueue of
   Just Queue{..} -> runDeleteQueue con queueName
   Nothing -> runDeleteAll con
 
-runDeleteQueue :: Connection -> L.ByteString -> IO ()
+runDeleteQueue :: Connection -> BC.ByteString -> IO ()
 runDeleteQueue con name = execute con "DELETE FROM queue_classic_jobs\
   \ WHERE q_name = ?" [name] >> return ()
 
 runDeleteAll :: Connection -> IO ()
 runDeleteAll con = execute_ con "DELETE FROM queue_classic_jobs" >> return ()
 
-lock :: Connection -> Queue -> Int -> IO (Maybe (Int, L.ByteString, Value))
+lock :: Connection -> Queue -> Int -> IO (Maybe (Int, BC.ByteString, Value))
 lock con Queue{..} topBound = runLock con queueName topBound
 
-runLock :: Connection -> L.ByteString -> Int -> IO (Maybe (Int, L.ByteString, Value))
+runLock :: Connection -> BC.ByteString -> Int -> IO (Maybe (Int, BC.ByteString, Value))
 runLock con name topBound = do
   let q = "SELECT id, method, args FROM lock_head(?, ?)"
   rs <- query con q (name, topBound)
@@ -203,6 +233,42 @@ runLock con name topBound = do
         Nothing -> putStrLn "Can't decode arguments" >> return Nothing --TODO
         Just as ->  return $ Just (i, method, as)
     _ -> error "Must not happen."
+
+-- | Unlock all the jobs for which the PostgreSQL server processes no longer
+-- exist to prevent infinitely locked jobs.
+unlockJobsOfDeadWorkers :: Connection -> IO ()
+unlockJobsOfDeadWorkers con = do
+  let q = "UPDATE queue_classic_jobs SET locked_at=NULL, locked_by=NULL \
+        \WHERE locked_by NOT IN (SELECT procpid FROM pg_stat_activity)"
+  _ <- execute_ con q
+  return ()
+
+----------------------------------------------------------------------
+-- LISTEN/NOTIFY
+-- The NOTIFY is done in a trigger upon job insertion.
+----------------------------------------------------------------------
+
+listenNotifications :: Connection -> String -> IO ()
+listenNotifications con name = do
+  _ <- execute_ con $ Query $ "LISTEN " `BC.append` BC.pack name
+  let loop = do
+        Notification{..} <- getNotification con
+        print (notificationPid, notificationChannel, notificationData)
+        loop
+  loop
+
+sendNotification :: Connection -> String -> IO ()
+sendNotification con name = do
+  _ <- execute_ con $ Query $ "NOTIFY " `BC.append` BC.pack name
+  return ()
+
+-- TODO Do they really build up ?
+drainNotifications :: Connection -> IO ()
+drainNotifications con = do
+  m <- getNotificationNonBlocking con
+  case m of
+    Nothing -> return ()
+    Just _ -> drainNotifications con
 
 ----------------------------------------------------------------------
 -- Worker
@@ -216,13 +282,13 @@ data Worker = Worker
     -- ^ Should the worker fork before handling a job ?
   , workerMaxAttempts :: Int
   , workerIsRunning :: IORef Bool
-  , workerHandler :: L.ByteString -> Value -> IO ()
+  , workerHandler :: BC.ByteString -> Value -> IO ()
   }
 
 defaultWorker :: IO Worker
 defaultWorker = do
   t <- newIORef True
-  return $ Worker (Queue (L.pack "default") Nothing) 10 False 5 t (curry print)
+  return $ Worker (Queue "default") 10 False 5 t (curry print)
 
 start :: Connection -> Worker -> IO ()
 start con w@Worker{..} = do
@@ -232,25 +298,27 @@ start con w@Worker{..} = do
 
 work :: Connection -> Worker -> IO ()
 work con w@Worker{..} = do
-  mjob <- lockJob con w 0
+  mjob <- lockJob con w
   case mjob of
     Nothing -> return ()
     Just job -> process con w job
 
-lockJob :: Connection -> Worker -> Int -> IO (Maybe (Int, L.ByteString, Value))
-lockJob con w@Worker{..} attempt = do
-  mjob <- lock con workerQueue workerTopBound
-  case mjob of
-    Just _ -> return mjob
-    Nothing -> do
-      if attempt < workerMaxAttempts
-        then do
-          -- putStrLn $ "Attempt #" ++ show attempt
-          threadDelay ((2 ^ attempt) * 1000000)
-          lockJob con w $ succ attempt
-        else return Nothing
+lockJob :: Connection -> Worker -> IO (Maybe (Int, BC.ByteString, Value))
+lockJob con Worker{..} = do
+  let loop = do
+        mjob <- lock con workerQueue workerTopBound
+        case mjob of
+          Just _ -> return mjob
+          Nothing -> do
+            _ <- execute_ con $ Query $ "LISTEN " `BC.append` queueName workerQueue
+            -- TODO The Ruby version waits with a timeout.
+            _ <- getNotification con
+            _ <- execute_ con $ Query $ "UNLISTEN " `BC.append` queueName workerQueue
+            drainNotifications con
+            loop
+  loop
 
-process :: Connection -> Worker -> (Int, L.ByteString, Value) -> IO ()
+process :: Connection -> Worker -> (Int, BC.ByteString, Value) -> IO ()
 process con w job@(i, method, arguments) =
   catch (call w job) handleException >> delete con i
   where
@@ -261,5 +329,5 @@ process con w job@(i, method, arguments) =
     putStrLn $ "  - argument: " ++ show arguments
     putStrLn $ "  - exception: " ++ show e
 
-call :: Worker -> (Int, L.ByteString, Value) -> IO ()
+call :: Worker -> (Int, BC.ByteString, Value) -> IO ()
 call Worker{..} (_, method, arguments) = workerHandler method arguments

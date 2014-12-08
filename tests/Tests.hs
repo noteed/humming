@@ -9,168 +9,176 @@ import Control.Monad (when)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C
 import Data.String (IsString)
+import System.Environment (getEnv)
 import System.Process (rawSystem, readProcess)
 import Test.HUnit (assertEqual, assertFailure)
 import Test.Framework (defaultMain, testGroup, Test)
 import Test.Framework.Providers.HUnit (testCase)
 
-databaseUrl = "postgres:///queue_classic_test"
+-- Unfortuantely the tests require a PostgreSQL server running.
+-- TODO Add my Docker-based scripts and make sure my images are available in
+-- the public registry.
+getConnectionString = do
+  host <- getEnv "DB_PORT_5432_TCP_ADDR"
+  return $ "dbname=docker user=docker password=docker host=" ++ host
 
 main :: IO ()
-main = defaultMain tests
+main = do
+  cs <- getConnectionString
+  defaultMain $ tests cs
 
-tests :: [Test]
-tests =
-  [ testCase "Setup/Teardown" $ bracket' $ return ()
-  , testCase "Empty/Count" $ bracket' emptyCount
-  , testCase "Enqueue/Count" $ bracket' enqueueCount
-  , testCase "Empty/Lock" $ bracket' emptyLock
-  , testCase "Enqueue/Lock" $ bracket' enqueueLock
-  , testCase "Enqueue twice/Delete all" $ bracket' enqueueEnqueueDeleteAll
-  , testCase "Enqueue twice/Delete one" $ bracket' enqueueEnqueueDeleteOne
-  , testCase "Enqueue twice/Delete queue" $ bracket' enqueueEnqueueDeleteQueue
+tests :: String -> [Test]
+tests connectionString =
+  [ testCase "Setup/Teardown" $ bracket' connectionString $ const (return ())
+  , testCase "Empty/Count" $ bracket' connectionString emptyCount
+  , testCase "Enqueue/Count" $ bracket' connectionString enqueueCount
+  , testCase "Empty/Lock" $ bracket' connectionString emptyLock
+  , testCase "Enqueue/Lock" $ bracket' connectionString enqueueLock
+  , testCase "Enqueue twice/Delete all" $ bracket' connectionString enqueueEnqueueDeleteAll
+  , testCase "Enqueue twice/Delete one" $ bracket' connectionString enqueueEnqueueDeleteOne
+  , testCase "Enqueue twice/Delete queue" $ bracket' connectionString enqueueEnqueueDeleteQueue
   ]
 
 ----------------------------------------------------------------------
 -- Tests
 ----------------------------------------------------------------------
 
-emptyCount :: IO ()
-emptyCount = do
-  output <- doCount
+emptyCount :: String -> IO ()
+emptyCount connectionString = do
+  output <- doCount connectionString
   assertEqual "The queue must be empty" "0\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must be empty" "0\n" output
 
-enqueueCount :: IO ()
-enqueueCount = do
-  doEnqueue "FOO"
+enqueueCount :: String -> IO ()
+enqueueCount connectionString = do
+  doEnqueue connectionString "FOO"
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must contain one job" "1\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must contain one job" "1\n" output
 
-emptyLock :: IO ()
-emptyLock = do
-  output <- doLockQueue "FOO"
+emptyLock :: String -> IO ()
+emptyLock connectionString = do
+  output <- doLockQueue connectionString "FOO"
   assertEqual "The queue must be empty" "Nothing\n" output
 
-enqueueLock :: IO ()
-enqueueLock = do
-  doEnqueue "FOO"
+enqueueLock :: String -> IO ()
+enqueueLock connectionString = do
+  doEnqueue connectionString "FOO"
 
-  output <- doLockQueue "FOO"
+  output <- doLockQueue connectionString "FOO"
   assertEqual "A job must have been locked"
-    "Just (1,Chunk \"bar\" Empty,Array (fromList [Number 1]))\n"
+    "Just (1,\"bar\",Array (fromList [Number 1]))\n"
     output
 
-enqueueEnqueueDeleteAll :: IO ()
-enqueueEnqueueDeleteAll = do
-  doEnqueue "FOO"
-  doEnqueue "FOO"
+enqueueEnqueueDeleteAll :: String -> IO ()
+enqueueEnqueueDeleteAll connectionString = do
+  doEnqueue connectionString "FOO"
+  doEnqueue connectionString "FOO"
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must contain two jobs" "2\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must contain two jobs" "2\n" output
 
-  deleteAll
+  deleteAll connectionString
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must be empty" "0\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must be empty" "0\n" output
 
-enqueueEnqueueDeleteOne :: IO ()
-enqueueEnqueueDeleteOne = do
-  doEnqueue "FOO"
-  doEnqueue "FOO"
+enqueueEnqueueDeleteOne :: String -> IO ()
+enqueueEnqueueDeleteOne connectionString = do
+  doEnqueue connectionString "FOO"
+  doEnqueue connectionString "FOO"
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must contain two jobs" "2\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must contain two jobs" "2\n" output
 
-  deleteOne 1
+  deleteOne connectionString 1
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must contain one job" "1\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must contain one job" "1\n" output
 
-enqueueEnqueueDeleteQueue :: IO ()
-enqueueEnqueueDeleteQueue = do
-  doEnqueue "FOO"
-  doEnqueue "BAR"
+enqueueEnqueueDeleteQueue :: String -> IO ()
+enqueueEnqueueDeleteQueue connectionString = do
+  doEnqueue connectionString "FOO"
+  doEnqueue connectionString "BAR"
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must contain two jobs" "2\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must contain one job" "1\n" output
 
-  output <- doCountQueue "BAR"
+  output <- doCountQueue connectionString "BAR"
   assertEqual "The queue must contain one job" "1\n" output
 
-  deleteQueue "FOO"
+  deleteQueue connectionString "FOO"
 
-  output <- doCount
+  output <- doCount connectionString
   assertEqual "The queue must contain one job" "1\n" output
 
-  output <- doCountQueue "FOO"
+  output <- doCountQueue connectionString "FOO"
   assertEqual "The queue must be empty" "0\n" output
 
-  output <- doCountQueue "BAR"
+  output <- doCountQueue connectionString "BAR"
   assertEqual "The queue must contain one job" "1\n" output
 
 ----------------------------------------------------------------------
 -- Command-line wrappers
 ----------------------------------------------------------------------
 
-doEnqueue name = do
+doEnqueue connectionString name = do
   _ <- rawSystem "humming"
-    [ "enqueue", "--database-url", databaseUrl
+    [ "enqueue", "--database-url", connectionString
     , "--queue", name, "--method", "bar", "--arguments", "[1]"
     ]
   return ()
 
-doCount = readProcess "humming"
-  [ "count", "--database-url", databaseUrl
+doCount connectionString = readProcess "humming"
+  [ "count", "--database-url", connectionString
   ] ""
 
-doCountQueue name = readProcess "humming"
-  [ "count", "--database-url", databaseUrl
+doCountQueue connectionString name = readProcess "humming"
+  [ "count", "--database-url", connectionString
   , "--queue", name
   ] ""
 
-doLockQueue name = readProcess "humming"
-  [ "lock", "--database-url", databaseUrl
+doLockQueue connectionString name = readProcess "humming"
+  [ "lock", "--database-url", connectionString
   , "--queue", name
   ] ""
 
-deleteAll = do
+deleteAll connectionString = do
   _ <- rawSystem "humming"
-    [ "delete", "--database-url", databaseUrl
+    [ "delete", "--database-url", connectionString
     ]
   return ()
 
-deleteOne i = do
+deleteOne connectionString i = do
   _ <- rawSystem "humming"
-    [ "delete", "--database-url", databaseUrl
+    [ "delete", "--database-url", connectionString
     , "--job", show i
     ]
   return ()
 
-deleteQueue name = do
+deleteQueue connectionString name = do
   _ <- rawSystem "humming"
-    [ "delete", "--database-url", databaseUrl
+    [ "delete", "--database-url", connectionString
     , "--queue", name
     ]
   return ()
@@ -179,15 +187,15 @@ deleteQueue name = do
 -- Setup / Teardown
 ----------------------------------------------------------------------
 
-setup :: IO ()
-setup = do
-  _ <-rawSystem "humming" ["create", "--database-url", databaseUrl]
+setup :: String -> IO ()
+setup connectionString = do
+  _ <-rawSystem "humming" ["create", "--database-url", connectionString]
   return ()
 
-teardown :: () -> IO ()
-teardown _ = do
-  _ <-rawSystem "humming" ["drop", "--database-url", databaseUrl]
+teardown :: String -> IO ()
+teardown connectionString = do
+  _ <-rawSystem "humming" ["drop", "--database-url", connectionString]
   return ()
 
-bracket' :: IO () -> IO ()
-bracket' = bracket setup teardown . const
+bracket' :: String -> (String -> IO ()) -> IO ()
+bracket' connectionString = bracket (setup connectionString >> return connectionString) teardown
