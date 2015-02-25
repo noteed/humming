@@ -20,5 +20,6 @@ RUN echo "listen_addresses = '*'" >> /etc/postgresql/9.1/main/postgresql.conf
 
 ADD run.sh /run.sh
 ADD humming /usr/bin/humming
+ADD Tests /usr/bin/Tests
 
 CMD /run.sh
