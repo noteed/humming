@@ -285,3 +285,4 @@ runCmd cmd = do
       if cmdWorkOnce
         then Q.work con w
         else Q.start con w
+  close con
