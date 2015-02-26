@@ -22,4 +22,8 @@ humming count --database-url "$DB"
 humming drop --database-url "$DB"
 
 # TODO Don't use pseudo-Docker port.
-DB_PORT_5432_TCP_ADDR=127.0.0.1 Tests
+#DB_PORT_5432_TCP_ADDR=127.0.0.1 Tests
+
+humming create --database-url "$DB"
+humming schedule --database-url "$DB" # Thid should never exit.
+humming drop --database-url "$DB"

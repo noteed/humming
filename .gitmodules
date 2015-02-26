@@ -1,0 +1,3 @@
+[submodule "minicron"]
+	path = minicron
+	url = git@github.com:noteed/minicron.git

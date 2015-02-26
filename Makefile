@@ -1,6 +1,7 @@
 all: .humming_touched
 
-dist/build/humming/humming: bin/humming.hs
+dist/build/humming/humming: \
+  bin/humming.hs Database/PostgreSQL/Queue.hs Database/PostgreSQL/Schedule.hs
 	./build.sh
 
 tests/Tests: tests/Tests.hs

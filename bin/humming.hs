@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main (main) where
 
+import Control.Monad (when)
 import Data.Aeson (json)
 import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)
@@ -13,6 +14,7 @@ import Paths_humming (version)
 import System.Console.CmdArgs.Implicit
 
 import qualified Database.PostgreSQL.Queue as Q
+import qualified Database.PostgreSQL.Schedule as S
 
 main :: IO ()
 main = (runCmd =<<) $ cmdArgs $
@@ -27,6 +29,7 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdListen
     , cmdNotify
     , cmdWork
+    , cmdSchedule
     ]
   &= summary versionString
   &= program "humming"
@@ -40,6 +43,7 @@ versionString =
 data Cmd =
     Create
     { cmdDatabaseUrl :: String
+    , cmdNoScheduling :: Bool
     }
     -- ^ Create the queue_classic_jobs table.
   | Drop
@@ -89,6 +93,10 @@ data Cmd =
     , cmdWorkOnce :: Bool
     }
     -- ^ TODO
+  | Schedule
+    { cmdDatabaseUrl :: String
+    }
+    -- ^ Move scheduled jobs to the queue.
   deriving (Data, Typeable)
 
 -- | Create a 'Create' command.
@@ -98,7 +106,11 @@ cmdCreate = Create
     &= explicit
     &= name "database-url"
     &= help "Database URL."
-  } &= help "Create the queue_classic_jobs table."
+  , cmdNoScheduling = def
+    &= explicit
+    &= name "no-scheduling"
+    &= help "Prevent the creation of the scheduled_jobs table."
+  } &= help "Create the queue_classic_jobs and scheduled_jobs tables."
     &= explicit
     &= name "create"
 
@@ -109,7 +121,7 @@ cmdDrop = Drop
     &= explicit
     &= name "database-url"
     &= help "Database URL."
-  } &= help "Drop the queue_classic_jobs table."
+  } &= help "Drop the queue_classic_jobs and scheduled_jobs tables."
     &= explicit
     &= name "drop"
 
@@ -246,6 +258,17 @@ cmdWork = Work
     &= explicit
     &= name "work"
 
+-- | Create a 'Schedule' command.
+cmdSchedule :: Cmd
+cmdSchedule = Schedule
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  } &= help "Watch the database and move scheduled jobs to the queues."
+    &= explicit
+    &= name "schedule"
+
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
@@ -254,8 +277,10 @@ runCmd cmd = do
   case cmd of
     Create{..} -> do
       Q.create con
+      when (not cmdNoScheduling) $ S.create con
     Drop{..} -> do
       Q.drop con
+      S.drop con
     Enqueue{..} -> do
       case parse json (L.pack cmdArguments) of
         Done _ arguments -> do
@@ -285,4 +310,6 @@ runCmd cmd = do
       if cmdWorkOnce
         then Q.work con w
         else Q.start con w
+    Schedule{..} -> do
+      S.schedule con
   close con
