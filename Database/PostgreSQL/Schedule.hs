@@ -3,20 +3,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.PostgreSQL.Schedule where
 
-import Control.Concurrent (forkIO, threadDelay)
-import Data.AffineSpace ((.+^), (.-.))
-import Data.List (sortBy)
-import Data.Ord (comparing)
+import Control.Concurrent (forkIO)
+import Data.Aeson (encode, ToJSON)
+import Data.AffineSpace ((.-.))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Thyme.Clock (fromSeconds, getCurrentTime, toSeconds, UTCTime)
-import Data.Thyme.Time (fromGregorian, mkUTCTime)
-import qualified Data.Time.Clock as C (diffUTCTime, NominalDiffTime, UTCTime)
-import qualified Data.Time.Clock.POSIX as C (utcTimeToPOSIXSeconds)
+import Data.Thyme.Time (fromGregorian, mkUTCTime, utcTimeToPOSIXSeconds)
+import qualified Data.Time.Clock as C (UTCTime)
+import qualified Data.Time.Clock.POSIX as C (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Data.Thyme.Format (formatTime)
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.Notification
-import Database.PostgreSQL.Simple.Types (Query(..))
 
 import System.IO (stdout, hFlush)
 import System.Locale (defaultTimeLocale, iso8601DateFormat)
@@ -32,10 +30,10 @@ import qualified Database.PostgreSQL.Queue as Q
 -- All the SQL queries are the ones from queue_classic.
 
 create :: Connection -> IO ()
-create con = createTable con
+create con = createTable con >> createFunctions con
 
 drop :: Connection -> IO ()
-drop con = dropTable con
+drop con = dropFunctions con >> dropTable con
 
 createTable :: Connection -> IO ()
 createTable con = withTransaction con $
@@ -44,6 +42,14 @@ createTable con = withTransaction con $
 dropTable :: Connection -> IO ()
 dropTable con = withTransaction con $
   execute_ con dropTableQuery >> return ()
+
+createFunctions :: Connection -> IO ()
+createFunctions con = withTransaction con $
+  execute_ con createFunctionsQuery >> return ()
+
+dropFunctions :: Connection -> IO ()
+dropFunctions con = withTransaction con $
+  execute_ con dropFunctionsQuery >> return ()
 
 ----------------------------------------------------------------------
 -- Setup query strings
@@ -64,6 +70,27 @@ createTableQuery =
 dropTableQuery :: Query
 dropTableQuery = "DROP TABLE IF EXISTS scheduled_jobs"
 
+createFunctionsQuery :: Query
+createFunctionsQuery =
+  "-- humming_schedule_notify function and trigger\n\
+  \CREATE FUNCTIOn humming_schedule_notify()\n\
+  \RETURNS TRIGGER AS $$\n\
+  \BEGIN\n\
+  \  PERFORM pg_notify('humming_schedule', '');\n\
+  \  RETURN NULL;\n\
+  \END;\n\
+  \$$ LANGUAGE plpgsql;\n\
+  \\n\
+  \CREATE TRIGGER humming_schedule_notify\n\
+  \AFTER UPDATE OR INSERT OR DELETE ON scheduled_jobs\n\
+  \FOR EACH ROW\n\
+  \EXECUTE PROCEDURE humming_schedule_notify();\n\
+  \ "
+
+dropFunctionsQuery :: Query
+dropFunctionsQuery =
+  "DROP FUNCTION IF EXISTS humming_schedule_notify() cascade;"
+
 nextScheduledJob :: Connection -> IO (Maybe Task)
 nextScheduledJob con = do
   jobs <- query_ con
@@ -74,10 +101,28 @@ nextScheduledJob con = do
     -- Use Data.Time.Clock ...
     (i, r::C.UTCTime, q, m, a):_ -> do
       -- ... then convert from epoch to Thyme's UTCTime.
-      let secondsSinceEpoch = floor $ C.utcTimeToPOSIXSeconds r
+      let secondsSinceEpoch = (floor $ C.utcTimeToPOSIXSeconds r) :: Int
           t = mkUTCTime (fromGregorian 1970 0 0) (fromSeconds secondsSinceEpoch)
       return . Just $ Task i t q m a Nothing
       -- TODO Task repetition.
+
+----------------------------------------------------------------------
+-- Scheduled jobs
+----------------------------------------------------------------------
+
+-- | A `NOTIFY` is automatically sent by a trigger.
+plan :: ToJSON a => Connection -> Text -> Text -> a -> UTCTime -> IO ()
+plan con name method args at =
+  runInsert con name method args at
+
+runInsert :: ToJSON a =>
+  Connection -> Text -> Text -> a -> UTCTime -> IO ()
+runInsert con name method args at = do
+  let q = "INSERT INTO scheduled_jobs (q_name, method, args, next_push_at) VALUES (?, ?, ?, ?)"
+  _ <- execute con q (name, method, Q.toStrict $ encode args, at')
+  return ()
+  where
+  at' = C.posixSecondsToUTCTime $ toSeconds $ utcTimeToPOSIXSeconds at
 
 ----------------------------------------------------------------------
 -- Job scheduling
@@ -89,18 +134,24 @@ schedule :: Connection -> IO ()
 schedule con = wakeupService True $ \request -> do
 
   -- Thread to detect a change in the set of jobs.
-  let poll = do
-        putStrLn "Polling for next scheduled jobs..."
-        hFlush stdout
-        threadDelay (20 * 1000000) -- TODO Replace polling by using LISTEN/NOTIFY.
-        mtask <- nextScheduledJob con
-        case mtask of
-          Nothing -> poll
-          Just task -> do
-            amount <- amountToSleep task
-            request amount >> poll
+  let loop = do
+        mjob <- nextScheduledJob con
+        case mjob of
+          Nothing -> return ()
+          Just job -> do
+            putStrLn "The set of scheduled jobs has changed."
+            hFlush stdout
+            amount <- amountToSleep job
+            request amount
 
-  _ <- forkIO poll
+        _ <- execute_ con "LISTEN humming_schedule"
+        -- TODO The Ruby version waits with a timeout.
+        _ <- getNotification con
+        _ <- execute_ con "UNLISTEN humming_schedule"
+        Q.drainNotifications con
+        loop
+
+  _ <- forkIO loop
 
   return . Client $ runTasks con
 

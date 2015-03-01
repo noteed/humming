@@ -5,9 +5,12 @@ module Main (main) where
 
 import Control.Monad (when)
 import Data.Aeson (json)
+import Data.AffineSpace ((.+^))
 import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)
 import qualified Data.ByteString.Lazy.Char8 as L
+import qualified Data.Text as T
+import Data.Thyme.Clock (fromSeconds, getCurrentTime)
 import Data.Version (showVersion)
 import Database.PostgreSQL.Simple
 import Paths_humming (version)
@@ -30,6 +33,7 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdNotify
     , cmdWork
     , cmdSchedule
+    , cmdPlan
     ]
   &= summary versionString
   &= program "humming"
@@ -97,6 +101,14 @@ data Cmd =
     { cmdDatabaseUrl :: String
     }
     -- ^ Move scheduled jobs to the queue.
+  | Plan
+    { cmdDatabaseUrl :: String
+    , cmdQueueName :: String
+    , cmdMethod :: String
+    , cmdArguments :: String
+    , cmdSeconds :: Int
+    }
+    -- ^ Schedule a job (similar to enqueue at a later time).
   deriving (Data, Typeable)
 
 -- | Create a 'Create' command.
@@ -269,6 +281,33 @@ cmdSchedule = Schedule
     &= explicit
     &= name "schedule"
 
+-- | Create a 'Plan' command.
+cmdPlan :: Cmd
+cmdPlan = Plan
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  , cmdQueueName = "default"
+    &= explicit
+    &= name "queue"
+    &= help "Queue name."
+  , cmdMethod = def
+    &= explicit
+    &= name "method"
+    &= help "Method name."
+  , cmdArguments = def
+    &= typ "JSON"
+    &= explicit
+    &= name "arguments"
+    &= help "Method arguments, in JSON."
+  , cmdSeconds = def
+    &= explicit
+    &= name "seconds"
+  } &= help "Schedule a job in N seconds."
+    &= explicit
+    &= name "plan"
+
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
 runCmd cmd = do
@@ -312,4 +351,11 @@ runCmd cmd = do
         else Q.start con w
     Schedule{..} -> do
       S.schedule con
+    Plan{..} -> do
+      case parse json (L.pack cmdArguments) of
+        Done _ arguments -> do
+          now <- getCurrentTime
+          let at = now .+^ fromSeconds cmdSeconds
+          S.plan con (T.pack cmdQueueName) (T.pack cmdMethod) arguments at
+        _ -> putStrLn "The argument ain't no valid JSON."
   close con

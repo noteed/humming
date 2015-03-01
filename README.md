@@ -17,8 +17,8 @@ language that can talk to PostgreSQL. In particular, you can use this library
 in Haskell, [`queue_classic`](https://github.com/QueueClassic/queue_classic) in
 Ruby, or [Pueuey](https://github.com/cecton/pueuey) in Python.
 
-Jobs are scheduled by writing to the scheduled jobs table. Inserting scheduled
-jobs in Humming queues is done by running the `humming schedule` process.
+Jobs are scheduled by writing to the scheduled jobs table. Moving scheduled
+jobs to Humming queues is done by running the `humming schedule` process.
 
 ## Example usage
 
@@ -39,7 +39,7 @@ the `humming` executable and Haskell library don't use environment variables.
 
 `humming schedule` push endlessly scheduled jobs to their respective queues. It
 is possible to take care of only jobs destined to a specific queue with the
-`--queue` option. It is safe to run multiple `humming schedule` process
+`--queue` option. It is safe to run multiple `humming schedule` processes
 (possibly on different hosts).
 
 ## Limitations

@@ -13,5 +13,6 @@ images/humming/humming: dist/build/humming/humming
 images/humming/Tests: tests/Tests
 	cp $< $@
 
-.humming_touched: images/humming/Dockerfile images/humming/humming images/humming/Tests
+.humming_touched: images/humming/Dockerfile images/humming/humming images/humming/Tests images/humming/run.sh
 	docker build -t noteed/humming images/humming
+	touch .humming_touched
