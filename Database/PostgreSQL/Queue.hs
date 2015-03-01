@@ -147,9 +147,10 @@ createFunctionsQuery =
   \\n\
   \-- queue_classic_notify function and trigger\n\
   \create function queue_classic_notify() returns trigger as $$ begin\n\
-  \  perform pg_notify(new.q_name, '');\n\
+  \  perform pg_notify(lower(new.q_name), '');\n\
   \  return null;\n\
-  \end $$ language plpgsql;\n\
+  \end;\n\
+  \$$ language plpgsql;\n\
   \\n\
   \create trigger queue_classic_notify\n\
   \after insert on queue_classic_jobs\n\
