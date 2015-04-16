@@ -34,6 +34,7 @@ main = (runCmd =<<) $ cmdArgs $
     , cmdWork
     , cmdSchedule
     , cmdPlan
+    , cmdObserve
     ]
   &= summary versionString
   &= program "humming"
@@ -307,6 +308,17 @@ cmdPlan = Plan
   } &= help "Schedule a job in N seconds."
     &= explicit
     &= name "plan"
+
+-- | Create an 'Observe' command.
+cmdObserve :: Cmd
+cmdObserve = Observe
+  { cmdDatabaseUrl = def
+    &= explicit
+    &= name "database-url"
+    &= help "Database URL."
+  } &= help "Display on stdout the queue evolution."
+    &= explicit
+    &= name "observe"
 
 -- | Run a sub-command.
 runCmd :: Cmd -> IO ()
