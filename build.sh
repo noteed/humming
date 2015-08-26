@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
 docker run \
-  -v `pwd`:/home/gusdev/go \
+  -v `pwd`/../minicron:/home/gusdev/minicron \
   -v `pwd`:/home/gusdev/humming \
   images.reesd.com/reesd/stack \
-  cabal install humming/minicron/minicron.cabal humming/humming.cabal --force-reinstalls
+  cabal install minicron/minicron.cabal humming/humming.cabal

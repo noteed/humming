@@ -4,7 +4,7 @@
 module Database.PostgreSQL.Schedule where
 
 import Control.Concurrent (forkIO)
-import Data.Aeson (encode, ToJSON)
+import Data.Aeson (toJSON, ToJSON, Value)
 import Data.AffineSpace ((.-.))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -61,7 +61,7 @@ createTableQuery =
   \  id bigserial PRIMARY KEY,\n\
   \  q_name text NOT NULL CHECK(length(q_name) > 0),\n\
   \  method text NOT NULL CHECK(length(method) > 0),\n\
-  \  args text NOT NULL,\n\
+  \  args json NOT NULL,\n\
   \  created_at timestamptz DEFAULT now(),\n\
   \  next_push_at timestamptz\n\
   \);\n\
@@ -119,7 +119,7 @@ runInsert :: ToJSON a =>
   Connection -> Text -> Text -> a -> UTCTime -> IO ()
 runInsert con name method args at = do
   let q = "INSERT INTO scheduled_jobs (q_name, method, args, next_push_at) VALUES (?, ?, ?, ?)"
-  _ <- execute con q (name, method, Q.toStrict $ encode args, at')
+  _ <- execute con q (name, method, toJSON args, at')
   return ()
   where
   at' = C.posixSecondsToUTCTime $ toSeconds $ utcTimeToPOSIXSeconds at
@@ -178,7 +178,7 @@ runTasks con = do
 
           _ <- execute con
             "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
-            [taskQueueName task, taskMethod task, taskArguments task]
+            (taskQueueName task, taskMethod task, taskArguments task)
 
           -- Remove this task.
           _ <- execute con
@@ -210,9 +210,7 @@ data Task = Task
   , taskWhen :: UTCTime
   , taskQueueName :: Text
   , taskMethod :: Text
-  , taskArguments :: Text
-  -- ^ This is JSON, but we don't decode/re-encode (as we read from
-  -- scheduled_jobs to write directly to queue_classic_jobs).
+  , taskArguments :: Value
   , taskRepetition :: Maybe (Maybe Int, Int)
   -- ^ Possibly repeat the task, possibly a finite number of times, every n
   -- seconds.

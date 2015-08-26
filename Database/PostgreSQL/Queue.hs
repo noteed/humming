@@ -6,7 +6,7 @@ import Prelude hiding (catch)
 
 import Control.Exception (SomeException, catch)
 import Control.Monad (when)
-import Data.Aeson (decode, encode, ToJSON, Value)
+import Data.Aeson (toJSON, ToJSON, Value)
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.IORef (IORef, newIORef, readIORef)
@@ -52,7 +52,7 @@ createTableQuery =
   \  id bigserial PRIMARY KEY,\n\
   \  q_name text NOT NULL CHECK(length(q_name) > 0),\n\
   \  method text NOT NULL CHECK(length(method) > 0),\n\
-  \  args text NOT NULL,\n\
+  \  args json NOT NULL,\n\
   \  locked_at timestamptz,\n\
   \  locked_by integer,\n\
   \  created_at timestamptz DEFAULT now()\n\
@@ -60,15 +60,7 @@ createTableQuery =
   \\n\
   \CREATE INDEX idx_qc_on_name_only_unlocked ON \
   \queue_classic_jobs (q_name, id) WHERE locked_at IS NULL;\n\
-  \\n\
-  \do $$ begin\n\
-  \-- If json type is available, use it for the args column.\n\
-  \perform * from pg_type where typname = 'json';\n\
-  \if found then\n\
-  \  alter table queue_classic_jobs alter column args type json using (args::json);\n\
-  \end if;\n\
-  \end $$ language plpgsql;\n\
-  \ "
+  \"
 
 dropTableQuery :: Query
 dropTableQuery = "DROP TABLE IF EXISTS queue_classic_jobs"
@@ -182,7 +174,7 @@ runInsert :: ToJSON a =>
   Connection -> BC.ByteString -> BC.ByteString -> a -> IO ()
 runInsert con name method args = do
   let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
-  _ <- execute con q [name, method, toStrict $ encode args]
+  _ <- execute con q (name, method, toJSON args)
   return ()
 
 toStrict :: L.ByteString -> BC.ByteString
@@ -229,10 +221,7 @@ runLock con name topBound = do
   rs <- query con q (name, topBound)
   case rs of
     [] -> return Nothing
-    [(i, method, arguments)] ->
-      case decode arguments of
-        Nothing -> putStrLn "Can't decode arguments" >> return Nothing --TODO
-        Just as ->  return $ Just (i, method, as)
+    [(i, method, arguments)] -> return $ Just (i, method, arguments)
     _ -> error "Must not happen."
 
 -- | Unlock all the jobs for which the PostgreSQL server processes no longer

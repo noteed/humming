@@ -1,5 +1,5 @@
 name:                humming
-version:             0.2.0
+version:             0.3.0
 Cabal-Version:       >= 1.8
 synopsis:            queue_classic in Haskell
 description:         queue_classic in Haskell
@@ -17,16 +17,16 @@ source-repository head
   location: https://github.com/noteed/humming
 
 library
-  build-depends:       aeson == 0.6.*,
+  build-depends:       aeson == 0.7.*,
                        base == 4.*,
                        bytestring > 0.9 && < 0.11,
                        minicron,
                        old-locale == 1.0.*,
-                       postgresql-simple >= 0.2 && < 0.4,
-                       text == 0.11.*,
+                       postgresql-simple == 0.4.*,
+                       text == 1.2.*,
                        thyme == 0.3.*,
                        time == 1.4.*,
-                       vector-space == 0.8.*
+                       vector-space == 0.10.*
   exposed-modules:     Database.PostgreSQL.Queue,
                        Database.PostgreSQL.Schedule
   ghc-options:         -Wall
@@ -34,14 +34,14 @@ library
 executable humming
   hs-source-dirs:      bin
   main-is:             humming.hs
-  build-depends:       aeson == 0.6.*,
-                       attoparsec == 0.10.*,
+  build-depends:       aeson == 0.7.*,
+                       attoparsec == 0.13.*,
                        base == 4.*,
                        bytestring > 0.9 && < 0.11,
-                       cmdargs == 0.9.*,
+                       cmdargs == 0.10.*,
                        humming,
-                       postgresql-simple >= 0.2 && < 0.4,
-                       text == 0.11.*,
+                       postgresql-simple == 0.4.*,
+                       text == 1.2.*,
                        thyme == 0.3.*,
-                       vector-space == 0.8.*
+                       vector-space == 0.10.*
   ghc-options:         -Wall
