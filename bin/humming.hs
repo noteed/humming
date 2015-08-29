@@ -324,7 +324,8 @@ runCmd cmd = do
       case parse json (L.pack cmdArguments) of
         Done _ arguments -> do
           let q = Q.Queue $ pack cmdQueueName
-          Q.enqueue con q (pack cmdMethod) arguments
+          i <- Q.enqueue con q (pack cmdMethod) arguments
+          putStrLn $ "Enqueued job #" ++ show i ++ "."
         _ -> putStrLn "The argument ain't no valid JSON."
     Count{..} -> do
       Q.runCount con (fmap pack cmdMQueueName) >>= putStrLn . show

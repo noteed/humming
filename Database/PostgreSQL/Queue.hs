@@ -164,16 +164,17 @@ data Queue = Queue
   }
 
 -- | A `NOTIFY` is automatically sent by a trigger.
-enqueue :: ToJSON a => Connection -> Queue -> BC.ByteString -> a -> IO ()
+enqueue :: ToJSON a => Connection -> Queue -> BC.ByteString -> a -> IO Int
 enqueue con Queue{..} method args =
   runInsert con queueName method args
 
 runInsert :: ToJSON a =>
-  Connection -> BC.ByteString -> BC.ByteString -> a -> IO ()
+  Connection -> BC.ByteString -> BC.ByteString -> a -> IO Int
 runInsert con name method args = do
-  let q = "INSERT INTO queue_classic_jobs (q_name, method, args) VALUES (?, ?, ?)"
-  _ <- execute con q (name, method, toJSON args)
-  return ()
+  let q = "INSERT INTO queue_classic_jobs (q_name, method, args) \
+          \VALUES (?, ?, ?) RETURNING id"
+  [Only i] <- query con q (name, method, toJSON args)
+  return i
 
 toStrict :: L.ByteString -> BC.ByteString
 toStrict = BC.concat . L.toChunks
