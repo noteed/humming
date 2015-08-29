@@ -1,5 +1,5 @@
 name:                humming
-version:             0.3.0
+version:             0.4.0
 Cabal-Version:       >= 1.8
 synopsis:            queue_classic in Haskell
 description:         queue_classic in Haskell

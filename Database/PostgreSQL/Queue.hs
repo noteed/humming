@@ -2,8 +2,6 @@
 {-# LANGUAGE RecordWildCards #-}
 module Database.PostgreSQL.Queue where
 
-import Prelude hiding (catch)
-
 import Control.Exception (SomeException, catch)
 import Control.Monad (when)
 import Data.Aeson (toJSON, ToJSON, Value)
@@ -272,13 +270,13 @@ data Worker = Worker
     -- ^ Should the worker fork before handling a job ?
   , workerMaxAttempts :: Int
   , workerIsRunning :: IORef Bool
-  , workerHandler :: BC.ByteString -> Value -> IO ()
+  , workerHandler :: Int -> BC.ByteString -> Value -> IO ()
   }
 
 defaultWorker :: IO Worker
 defaultWorker = do
   t <- newIORef True
-  return $ Worker (Queue "default") 10 False 5 t (curry print)
+  return $ Worker (Queue "default") 10 False 5 t (\i m a -> print (i, m , a))
 
 start :: Connection -> Worker -> IO ()
 start con w@Worker{..} = do
@@ -320,4 +318,4 @@ process con w job@(i, method, arguments) =
     putStrLn $ "  - exception: " ++ show e
 
 call :: Worker -> (Int, BC.ByteString, Value) -> IO ()
-call Worker{..} (_, method, arguments) = workerHandler method arguments
+call Worker{..} (i, method, arguments) = workerHandler i method arguments
