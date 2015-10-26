@@ -17,16 +17,16 @@ source-repository head
   location: https://github.com/noteed/humming
 
 library
-  build-depends:       aeson == 0.7.*,
+  build-depends:       aeson,
                        base == 4.*,
-                       bytestring > 0.9 && < 0.11,
+                       bytestring,
                        minicron,
-                       old-locale == 1.0.*,
-                       postgresql-simple == 0.4.*,
-                       text == 1.2.*,
-                       thyme == 0.3.*,
-                       time == 1.4.*,
-                       vector-space == 0.10.*
+                       old-locale,
+                       postgresql-simple,
+                       text,
+                       thyme,
+                       time,
+                       vector-space
   exposed-modules:     Database.PostgreSQL.Queue,
                        Database.PostgreSQL.Schedule
   ghc-options:         -Wall
@@ -34,14 +34,14 @@ library
 executable humming
   hs-source-dirs:      bin
   main-is:             humming.hs
-  build-depends:       aeson == 0.7.*,
-                       attoparsec == 0.13.*,
+  build-depends:       aeson,
+                       attoparsec,
                        base == 4.*,
-                       bytestring > 0.9 && < 0.11,
-                       cmdargs == 0.10.*,
+                       bytestring,
+                       cmdargs,
                        humming,
-                       postgresql-simple == 0.4.*,
-                       text == 1.2.*,
-                       thyme == 0.3.*,
-                       vector-space == 0.10.*
+                       postgresql-simple,
+                       text,
+                       thyme,
+                       vector-space
   ghc-options:         -Wall
