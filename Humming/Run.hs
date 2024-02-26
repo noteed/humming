@@ -24,14 +24,13 @@ import qualified Database.PostgreSQL.Schedule as S
 run :: Command.Command -> IO ()
 run cmd = case cmd of
   Command.Run -> Database.waitTemporaryDb True
-  _ -> run' cmd
+  Command.WithDb url cmd' -> run' url cmd'
 
-run' :: Command.Command -> IO ()
-run' cmd = do
-  con <- connectPostgreSQL . pack $ Command.cmdDatabaseUrl cmd
+run' :: String -> Command.CommandWithDb -> IO ()
+run' url cmd = do
+  con <- connectPostgreSQL . pack $ url
   _ <- execute_ con "SET application_name='humming'"
   case cmd of
-    Command.Run -> pure () -- Handled in `run`.
     Command.Create{..} -> do
       Q.create con
       when (not cmdNoScheduling) $ S.create con

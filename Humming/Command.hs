@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Humming.Command
   ( Command(..)
+  , CommandWithDb(..)
   , parserInfo
   ) where
 
@@ -13,64 +14,53 @@ import qualified Options.Applicative as A
 data Command =
     Run
     -- ^ Run a temporary PostgreSQL database (using tmp-postgres).
-  | Create
-    { cmdDatabaseUrl :: String
-    , cmdNoScheduling :: Bool
+  | WithDb String CommandWithDb
+  deriving (Eq, Show)
+
+data CommandWithDb =
+    Create
+    { cmdNoScheduling :: Bool
     }
     -- ^ Create the queue_classic_jobs table.
   | Drop
-    { cmdDatabaseUrl :: String
-    }
     -- ^ Drop the queue_classic_jobs table.
   | Enqueue
-    { cmdDatabaseUrl :: String
-    , cmdQueueName :: String
+    { cmdQueueName :: String
     , cmdMethod :: String
     , cmdArguments :: String
     }
     -- ^ Push a job on a queue.
   | Count
-    { cmdDatabaseUrl :: String
-    , cmdMQueueName :: Maybe String
+    { cmdMQueueName :: Maybe String
     }
     -- ^ Count the jobs on a queue.
   | Delete
-    { cmdDatabaseUrl :: String
     -- only at most one of --job and --queue can be provided.
-    , cmdMQueueName :: Maybe String
+    { cmdMQueueName :: Maybe String
     , cmdMJobId :: Maybe Int
     }
   | Lock
-    { cmdDatabaseUrl :: String
-    , cmdQueueName :: String
+    { cmdQueueName :: String
     }
     -- ^ Try to lock a job from a queue.
   | UnlockDeads
-    { cmdDatabaseUrl :: String
-    }
     -- ^ Unlock jobs held by dead PostgreSQL processes.
   | Listen
-    { cmdDatabaseUrl :: String
-    , cmdQueueName :: String
+    { cmdQueueName :: String
     }
     -- ^ Start to listen for PostgreSQL notifications.
   | Notify
-    { cmdDatabaseUrl :: String
-    , cmdQueueName :: String
+    { cmdQueueName :: String
     }
     -- ^ Send a notification through PostgreSQL.
   | Work
-    { cmdDatabaseUrl :: String
-    , cmdQueueName :: String
+    { cmdQueueName :: String
     , cmdWorkOnce :: Bool
     }
   | Schedule
-    { cmdDatabaseUrl :: String
-    }
     -- ^ Move scheduled jobs to the queue.
   | Plan
-    { cmdDatabaseUrl :: String
-    , cmdQueueName :: String
+    { cmdQueueName :: String
     , cmdMethod :: String
     , cmdArguments :: String
     , cmdSeconds :: Int
@@ -139,114 +129,144 @@ runParser :: A.Parser Command
 runParser = pure Run
 
 createParser :: A.Parser Command
-createParser = Create
+createParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.switch
-      ( A.long "no-scheduling"
-        <> A.help "Prevent the creation of the scheduled_jobs table." )
+  <*>
+  ( Create
+    <$> A.switch
+        ( A.long "no-scheduling"
+          <> A.help "Prevent the creation of the scheduled_jobs table." )
+  )
 
 dropParser :: A.Parser Command
-dropParser = Drop
+dropParser = WithDb
   <$> parseDatabaseUrl
+  <*> pure Drop
 
 enqueueParser :: A.Parser Command
-enqueueParser = Enqueue
+enqueueParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." )
-  <*> A.strOption
-      ( A.long "method"
-        <> A.metavar "METHOD"
-        <> A.help "Method name." )
-  <*> A.strOption
-      ( A.long "arguments"
-        <> A.metavar "JSON"
-        <> A.help "Method arguments, in JSON." )
+  <*>
+  ( Enqueue
+    <$> A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." )
+    <*> A.strOption
+        ( A.long "method"
+          <> A.metavar "METHOD"
+          <> A.help "Method name." )
+    <*> A.strOption
+        ( A.long "arguments"
+          <> A.metavar "JSON"
+          <> A.help "Method arguments, in JSON." )
+  )
 
 countParser :: A.Parser Command
-countParser = Count
+countParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.optional (A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." ))
+  <*>
+  ( Count
+    <$> A.optional (A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." ))
+  )
 
 deleteParser :: A.Parser Command
-deleteParser = Delete
+deleteParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.optional (A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." ))
-  <*> A.optional (A.option A.auto
-      ( A.long "job"
-        <> A.metavar "ID"
-        <> A.help "Job ID." ))
+  <*>
+  ( Delete
+    <$> A.optional (A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." ))
+    <*> A.optional (A.option A.auto
+        ( A.long "job"
+          <> A.metavar "ID"
+          <> A.help "Job ID." ))
+  )
 
 lockParser :: A.Parser Command
-lockParser = Lock
+lockParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." )
+  <*>
+  ( Lock
+    <$> A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." )
+  )
 
 unlockDeadsParser :: A.Parser Command
-unlockDeadsParser = UnlockDeads
+unlockDeadsParser = WithDb
   <$> parseDatabaseUrl
+  <*> pure UnlockDeads
 
 listenParser :: A.Parser Command
-listenParser = Listen
+listenParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." )
+  <*>
+  ( Listen
+    <$> A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." )
+  )
 
 notifyParser :: A.Parser Command
-notifyParser = Notify
+notifyParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." )
+  <*>
+  ( Notify
+    <$> A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." )
+  )
 
 workParser :: A.Parser Command
-workParser = Work
+workParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." )
-  <*> A.switch
-      ( A.long "once"
-        <> A.help "Process a single job then exit." )
+  <*>
+  ( Work
+    <$> A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." )
+    <*> A.switch
+        ( A.long "once"
+          <> A.help "Process a single job then exit." )
+  )
 
 scheduleParser :: A.Parser Command
-scheduleParser = Schedule
+scheduleParser = WithDb
   <$> parseDatabaseUrl
+  <*> pure Schedule
 
 planParser :: A.Parser Command
-planParser = Plan
+planParser = WithDb
   <$> parseDatabaseUrl
-  <*> A.strOption
-      ( A.long "queue"
-        <> A.metavar "NAME"
-        <> A.help "Queue name." )
-  <*> A.strOption
-      ( A.long "method"
-        <> A.metavar "METHOD"
-        <> A.help "Method name." )
-  <*> A.strOption
-      ( A.long "arguments"
-        <> A.metavar "JSON"
-        <> A.help "Method arguments, in JSON." )
-  <*> A.option A.auto
-      ( A.long "seconds"
-        <> A.metavar "SECONDS"
-        <> A.help "Number of seconds." )
+  <*>
+  ( Plan
+    <$> A.strOption
+        ( A.long "queue"
+          <> A.metavar "NAME"
+          <> A.help "Queue name." )
+    <*> A.strOption
+        ( A.long "method"
+          <> A.metavar "METHOD"
+          <> A.help "Method name." )
+    <*> A.strOption
+        ( A.long "arguments"
+          <> A.metavar "JSON"
+          <> A.help "Method arguments, in JSON." )
+    <*> A.option A.auto
+        ( A.long "seconds"
+          <> A.metavar "SECONDS"
+          <> A.help "Number of seconds." )
+  )
 
 --------------------------------------------------------------------------------
 parseDatabaseUrl :: A.Parser String
