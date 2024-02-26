@@ -20,6 +20,7 @@ in {
         "LICENSE"
         (and "bin" (or_ (matchExt "hs") isDirectory))
         (and "Database" (or_ (matchExt "hs") isDirectory))
+        (and "Humming" (or_ (matchExt "hs") isDirectory))
         (and "tests" (or_ (matchExt "hs") isDirectory))
       ];
     };

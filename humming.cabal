@@ -18,28 +18,30 @@ source-repository head
 
 library
   build-depends:       aeson,
-                       base == 4.*,
+                       attoparsec,
+                       base >=4.7 && <5,
                        bytestring,
                        minicron,
-                       old-locale,
+                       optparse-applicative,
                        postgresql-simple,
                        text,
                        thyme,
                        time,
                        vector-space
   exposed-modules:     Database.PostgreSQL.Queue,
-                       Database.PostgreSQL.Schedule
+                       Database.PostgreSQL.Schedule,
+                       Humming.Command,
+                       Humming.Run
   ghc-options:         -Wall
 
 executable humming
   hs-source-dirs:      bin
   main-is:             humming.hs
   build-depends:       aeson,
-                       attoparsec,
-                       base == 4.*,
+                       base >=4.7 && <5,
                        bytestring,
-                       cmdargs,
                        humming,
+                       optparse-applicative,
                        postgresql-simple,
                        text,
                        thyme,
