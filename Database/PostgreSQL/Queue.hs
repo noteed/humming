@@ -286,7 +286,7 @@ start con w@Worker{..} = do
   when continue $ start con w
 
 work :: Connection -> Worker -> IO ()
-work con w@Worker{..} = do
+work con w = do
   mjob <- lockJob con w
   case mjob of
     Nothing -> return ()

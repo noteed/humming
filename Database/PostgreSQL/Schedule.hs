@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.PostgreSQL.Schedule where
@@ -9,15 +10,15 @@ import Data.AffineSpace ((.-.))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Thyme.Clock (fromSeconds, getCurrentTime, toSeconds, UTCTime)
-import Data.Thyme.Time (fromGregorian, mkUTCTime, utcTimeToPOSIXSeconds)
+import Data.Thyme.Clock.POSIX (utcTimeToPOSIXSeconds)
+import Data.Thyme.Time (fromGregorian, pattern UTCTime)
 import qualified Data.Time.Clock as C (UTCTime)
 import qualified Data.Time.Clock.POSIX as C (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
-import Data.Thyme.Format (formatTime)
+import Data.Thyme.Format (defaultTimeLocale, formatTime)
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.Notification
 
 import System.IO (stdout, hFlush)
-import System.Locale (defaultTimeLocale, iso8601DateFormat)
 
 import System.Cron.WakeUp
 
@@ -102,7 +103,7 @@ nextScheduledJob con = do
     (i, r::C.UTCTime, q, m, a):_ -> do
       -- ... then convert from epoch to Thyme's UTCTime.
       let secondsSinceEpoch = (floor $ C.utcTimeToPOSIXSeconds r) :: Int
-          t = mkUTCTime (fromGregorian 1970 0 0) (fromSeconds secondsSinceEpoch)
+          t = UTCTime (fromGregorian 1970 0 0) (fromSeconds secondsSinceEpoch)
       return . Just $ Task i t q m a Nothing
       -- TODO Task repetition.
 
@@ -196,7 +197,7 @@ runTasks con = do
               return $ Just amount'
   where
   locale = defaultTimeLocale
-  format = iso8601DateFormat $ Just "%H:%M:%S"
+  format = "%Y-%m-%dT%H:%M:%S%N"
 
 amountToSleep :: Task -> IO Int
 amountToSleep Task{..} = do
