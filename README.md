@@ -44,6 +44,10 @@ is possible to take care of only jobs destined to a specific queue with the
 Instead of a `--database-url` option, it is possible to use the
 `HUMMING_CONNECTION_STRING` environment variable.
 
+## Tests
+
+Tests can be run withing GHCi with the `runTests` function.
+
 ## Limitations
 
 - Uses `procpid` from `pg_stat_activity` which was renamed `pid` in PostgreSQL

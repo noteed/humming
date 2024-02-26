@@ -50,3 +50,20 @@ executable humming
                        thyme,
                        vector-space
   ghc-options:         -Wall
+
+test-suite humming-tests
+  build-depends:
+      base
+    , bytestring
+    , humming
+    , HUnit
+    , process
+    , test-framework
+    , test-framework-hunit
+  other-modules:
+    Humming.GHCi
+    Humming.Runner
+  type: exitcode-stdio-1.0
+  main-is: run-tests.hs
+  hs-source-dirs:
+      tests
