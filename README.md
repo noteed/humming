@@ -22,8 +22,7 @@ jobs to Humming queues is done by running the `humming schedule` process.
 
 ## Example usage
 
-A `humming` executable is provided. Unlike the original `queue_classic`, both
-the `humming` executable and Haskell library don't use environment variables.
+A `humming` executable is provided.
 
     > export DB='postgres://username:password@localhost/database'
     > humming create  --database-url $DB
@@ -41,6 +40,9 @@ the `humming` executable and Haskell library don't use environment variables.
 is possible to take care of only jobs destined to a specific queue with the
 `--queue` option. It is safe to run multiple `humming schedule` processes
 (possibly on different hosts).
+
+Instead of a `--database-url` option, it is possible to use the
+`HUMMING_CONNECTION_STRING` environment variable.
 
 ## Limitations
 

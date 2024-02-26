@@ -16,6 +16,7 @@ import qualified Data.ByteString.Lazy.Char8 as L
 import qualified Data.Text as T
 import Data.Thyme.Clock (fromSeconds, getCurrentTime)
 import Database.PostgreSQL.Simple
+import System.Environment (lookupEnv)
 
 import qualified Database.PostgreSQL.Queue as Q
 import qualified Database.PostgreSQL.Schedule as S
@@ -24,7 +25,13 @@ import qualified Database.PostgreSQL.Schedule as S
 run :: Command.Command -> IO ()
 run cmd = case cmd of
   Command.Run -> Database.waitTemporaryDb True
-  Command.WithDb url cmd' -> run' url cmd'
+  Command.WithDb (Just url) cmd' -> run' url cmd'
+  Command.WithDb Nothing cmd' -> do
+    mconnstr <- lookupEnv "HUMMING_CONNECTION_STRING"
+    case mconnstr of
+      Just connstr -> run' connstr cmd'
+      Nothing -> error "--database-url or HUMMING_CONNECTION_STRING required."
+
 
 run' :: String -> Command.CommandWithDb -> IO ()
 run' url cmd = do

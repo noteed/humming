@@ -14,7 +14,7 @@ import qualified Options.Applicative as A
 data Command =
     Run
     -- ^ Run a temporary PostgreSQL database (using tmp-postgres).
-  | WithDb String CommandWithDb
+  | WithDb (Maybe String) CommandWithDb
   deriving (Eq, Show)
 
 data CommandWithDb =
@@ -269,9 +269,10 @@ planParser = WithDb
   )
 
 --------------------------------------------------------------------------------
-parseDatabaseUrl :: A.Parser String
+parseDatabaseUrl :: A.Parser (Maybe String)
 parseDatabaseUrl =
-  A.strOption
-  ( A.long "database-url"
-    <> A.metavar "URL"
-    <> A.help "Database URL." )
+  A.optional $
+    A.strOption
+    ( A.long "database-url"
+      <> A.metavar "URL"
+      <> A.help "Database URL." )
