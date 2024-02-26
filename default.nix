@@ -11,4 +11,12 @@ in rec
     binaries = nixpkgs.haskellPackages.humming;
     # binaries + haddock are also available as binaries.all.
     haddock = nixpkgs.haskellPackages.humming.doc;
+
+    # A shell to try out our binaries
+    # Run with nix-shell default.nix -A shell
+    shell = nixpkgs.mkShell {
+      buildInputs = [
+        binaries
+      ];
+    };
   }
