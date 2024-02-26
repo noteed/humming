@@ -11,7 +11,9 @@ import qualified Options.Applicative as A
 --------------------------------------------------------------------------------
 -- | Data type representing the different command-line subcommands.
 data Command =
-    Create
+    Run
+    -- ^ Run a temporary PostgreSQL database (using tmp-postgres).
+  | Create
     { cmdDatabaseUrl :: String
     , cmdNoScheduling :: Bool
     }
@@ -92,6 +94,9 @@ versionString =
 --------------------------------------------------------------------------------
 cmdParser :: A.Parser Command
 cmdParser = A.subparser (
+    A.command "run" (A.info (A.helper <*> runParser)
+                      (A.progDesc "Create a temporary PostgreSQL database (using tmp-postgres)."))
+    <>
     A.command "create" (A.info (A.helper <*> createParser)
                       (A.progDesc "Create the queue_classic_jobs and scheduled_jobs tables."))
     <>
@@ -130,6 +135,9 @@ cmdParser = A.subparser (
     )
 
 --------------------------------------------------------------------------------
+runParser :: A.Parser Command
+runParser = pure Run
+
 createParser :: A.Parser Command
 createParser = Create
   <$> A.strOption

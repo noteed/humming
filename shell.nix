@@ -10,16 +10,27 @@ let
 
   contents = import ./nix/contents.nix { inherit nixpkgs; };
 
-  # Niv is great at pinning dependencies in sources.json and computing SHA's etc.
-  nix-tooling = with hp; [ (callCabal2nix "niv" sources.niv { }) ];
+  tooling =
+    [
+      # Niv is great at pinning dependencies in sources.json and computing SHA's etc.
+      (hp.callCabal2nix "niv" sources.niv { })
 
-  # Haskell tools
-  haskell-tooling = with hp; [ cabal-install ghcid hlint hasktags fourmolu apply-refact ];
+      # Haskell tools
+      hp.cabal-install
+      hp.ghcid
+      hp.hlint
+      hp.hasktags
+      hp.fourmolu
+      hp.apply-refact
 
-  # Add more as we need them.
-  formatters = [ nixpkgs.treefmt ] ;
+      # Add more as we need them.
+      nixpkgs.treefmt
+
+      # PostgreSQL
+      nixpkgs.postgresql
+    ];
 
 in hp.shellFor {
   packages = p: map (contents.getPkg p) (builtins.attrNames contents.pkgList);
-  buildInputs = nix-tooling ++ haskell-tooling ++ formatters;
+  buildInputs = tooling;
 }

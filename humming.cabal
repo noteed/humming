@@ -24,13 +24,16 @@ library
                        minicron,
                        optparse-applicative,
                        postgresql-simple,
+                       resource-pool,
                        text,
                        thyme,
                        time,
+                       tmp-postgres,
                        vector-space
   exposed-modules:     Database.PostgreSQL.Queue,
                        Database.PostgreSQL.Schedule,
                        Humming.Command,
+                       Humming.Database,
                        Humming.Run
   ghc-options:         -Wall
 

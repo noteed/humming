@@ -5,6 +5,7 @@ module Humming.Run
   ) where
 
 import qualified Humming.Command as Command
+import qualified Humming.Database as Database
 
 import Control.Monad (when)
 import Data.Aeson (json)
@@ -21,10 +22,16 @@ import qualified Database.PostgreSQL.Schedule as S
 
 -- | Run a sub-command.
 run :: Command.Command -> IO ()
-run cmd = do
+run cmd = case cmd of
+  Command.Run -> Database.waitTemporaryDb True
+  _ -> run' cmd
+
+run' :: Command.Command -> IO ()
+run' cmd = do
   con <- connectPostgreSQL . pack $ Command.cmdDatabaseUrl cmd
   _ <- execute_ con "SET application_name='humming'"
   case cmd of
+    Command.Run -> pure () -- Handled in `run`.
     Command.Create{..} -> do
       Q.create con
       when (not cmdNoScheduling) $ S.create con
