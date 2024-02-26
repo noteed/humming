@@ -1,5 +1,5 @@
-import Humming.Runner (runTests)
+import Humming.Runner (runTests, CliOrFun(Fun))
 
 --------------------------------------------------------------------------------
 main :: IO ()
-main = runTests
+main = runTests Fun

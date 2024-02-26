@@ -3,26 +3,38 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 -- | Tests for the `humming` executable.
 module Humming.Runner
-  ( runTests
+  ( CliOrFun(..)
+  , runTests
   ) where
 
 import Control.Exception (bracket)
-import System.Environment (lookupEnv)
+import qualified Data.ByteString.Char8 as BC
+import qualified Database.Postgres.Temp as PGTemp
 import System.Process (rawSystem, readProcess)
 import Test.HUnit (assertEqual)
 import Test.Framework (defaultMain, Test)
 import Test.Framework.Providers.HUnit (testCase)
 
+-- Use the humming binary, or use the underlying functions. When building the
+-- package with Nix, the binary is not available (since we're building it).
+-- When using ghci-with-database.sh, it it available and can be used in these
+-- tests.
+
+data CliOrFun = Cli | Fun
+  deriving (Eq, Show)
+
 -------------------------------------------------------------------------------
-runTests :: IO ()
-runTests = do
-  mcs <- lookupEnv "HUMMING_CONNECTION_STRING"
-  case mcs of
-    Just cs -> defaultMain $ tests cs
-    Nothing ->
-      -- TODO Setup a connection string during the Nix build.
-      pure ()
-      -- error "HUMMING_CONNECTION_STRING required."
+runTests :: CliOrFun -> IO ()
+runTests Cli = do
+  merr <- PGTemp.with $ \db -> do
+    let connstr = PGTemp.toConnectionString db
+    defaultMain $ tests $ BC.unpack connstr
+  case merr of
+    Left err -> error $ show err
+    Right () -> pure ()
+
+-- TODO.
+runTests Fun = pure ()
 
 tests :: String -> [Test]
 tests connectionString =

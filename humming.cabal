@@ -60,6 +60,7 @@ test-suite humming-tests
     , process
     , test-framework
     , test-framework-hunit
+    , tmp-postgres
   other-modules:
     Humming.GHCi
     Humming.Runner
@@ -67,3 +68,6 @@ test-suite humming-tests
   main-is: run-tests.hs
   hs-source-dirs:
       tests
+  build-tools:
+    -- for tmp-postgres
+      postgresql
