@@ -140,27 +140,18 @@ runParser = pure Run
 
 createParser :: A.Parser Command
 createParser = Create
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.switch
       ( A.long "no-scheduling"
         <> A.help "Prevent the creation of the scheduled_jobs table." )
 
 dropParser :: A.Parser Command
 dropParser = Drop
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
 
 enqueueParser :: A.Parser Command
 enqueueParser = Enqueue
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -176,10 +167,7 @@ enqueueParser = Enqueue
 
 countParser :: A.Parser Command
 countParser = Count
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.optional (A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -187,10 +175,7 @@ countParser = Count
 
 deleteParser :: A.Parser Command
 deleteParser = Delete
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.optional (A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -202,10 +187,7 @@ deleteParser = Delete
 
 lockParser :: A.Parser Command
 lockParser = Lock
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -213,17 +195,11 @@ lockParser = Lock
 
 unlockDeadsParser :: A.Parser Command
 unlockDeadsParser = UnlockDeads
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
 
 listenParser :: A.Parser Command
 listenParser = Listen
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -231,10 +207,7 @@ listenParser = Listen
 
 notifyParser :: A.Parser Command
 notifyParser = Notify
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -242,10 +215,7 @@ notifyParser = Notify
 
 workParser :: A.Parser Command
 workParser = Work
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -256,17 +226,11 @@ workParser = Work
 
 scheduleParser :: A.Parser Command
 scheduleParser = Schedule
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
 
 planParser :: A.Parser Command
 planParser = Plan
-  <$> A.strOption
-      ( A.long "database-url"
-        <> A.metavar "URL"
-        <> A.help "Database URL." )
+  <$> parseDatabaseUrl
   <*> A.strOption
       ( A.long "queue"
         <> A.metavar "NAME"
@@ -283,3 +247,11 @@ planParser = Plan
       ( A.long "seconds"
         <> A.metavar "SECONDS"
         <> A.help "Number of seconds." )
+
+--------------------------------------------------------------------------------
+parseDatabaseUrl :: A.Parser String
+parseDatabaseUrl =
+  A.strOption
+  ( A.long "database-url"
+    <> A.metavar "URL"
+    <> A.help "Database URL." )
