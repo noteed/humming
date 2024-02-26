@@ -17,6 +17,11 @@ in rec
     shell = nixpkgs.mkShell {
       buildInputs = [
         binaries
+        nixpkgs.postgresql
       ];
+
+      shellHook = ''
+        source <(humming --bash-completion-script `which humming`)
+      '';
     };
   }
