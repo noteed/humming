@@ -17,6 +17,7 @@ source-repository head
   location: https://github.com/noteed/humming
 
 library
+  hs-source-dirs:      src
   build-depends:       aeson,
                        attoparsec,
                        base >=4.7 && <5,

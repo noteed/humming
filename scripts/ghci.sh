@@ -8,8 +8,7 @@
 ghc --interactive \
   -haddock \
   -ibin/ \
-  -iDatabase/ \
-  -iHumming/ \
+  -isrc/ \
   -Wall \
   -Wno-type-defaults \
   -ghci-script scripts/ghci.conf
