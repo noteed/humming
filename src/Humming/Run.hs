@@ -8,7 +8,7 @@ import qualified Humming.Command as Command
 import qualified Humming.Database as Database
 
 import Control.Monad (when)
-import Data.Aeson (json)
+import Data.Aeson.Parser (json) -- From attoparsec-aeson since aeson 2.2.
 import Data.AffineSpace ((.+^))
 import Data.Attoparsec.Lazy (parse, Result(..))
 import Data.ByteString.Char8 (pack)

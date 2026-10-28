@@ -6,13 +6,14 @@
 let
 
   sources = import ./sources.nix;
-  inherit (sources) minicron;
+  inherit (sources) minicron tmp-postgres;
 
   getOverlays = pkg : import "${pkg}/nix/overlays.nix";
 
   # We can overlay Haskell packages here.
   haskellOverlays =
     []
+    ++ getOverlays tmp-postgres
     ++ getOverlays minicron
     ;
 
