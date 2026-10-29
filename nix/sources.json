@@ -5,10 +5,10 @@
         "homepage": null,
         "owner": "noteed",
         "repo": "minicron",
-        "rev": "b0bf3a452040328251a6acebf0a995f15da21d22",
-        "sha256": "0bxhm0xm1l1ammac4i2apw9jwpsndlmhjn23cqh36g2s940wzq4n",
+        "rev": "c3f9893ed711d25d27603cd1c82376fa9368c49f",
+        "sha256": "0dvl92fxp40v769s5mn1xk42a7f48hl6sdxp69llg624dqgi6nma",
         "type": "tarball",
-        "url": "https://github.com/noteed/minicron/archive/b0bf3a452040328251a6acebf0a995f15da21d22.tar.gz",
+        "url": "https://github.com/noteed/minicron/archive/c3f9893ed711d25d27603cd1c82376fa9368c49f.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
@@ -41,10 +41,10 @@
         "homepage": "https://github.com/NixOS/nixpkgs",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1f607aa79b6356ed45d3cd3c8079c196e79efa2c",
-        "sha256": "1s7mrwxqalq59bqklyi3015kr2sy1kvf8a8s6d9ahchv7d3fn39j",
+        "rev": "08d3a97586f6b6343b3b5e799980773629432610",
+        "sha256": "18yjn1zdwhkn2p9yf95xw73pk4qsg2w6w80pc9gv6y11zwqqbag7",
         "type": "tarball",
-        "url": "https://github.com/NixOS/nixpkgs/archive/1f607aa79b6356ed45d3cd3c8079c196e79efa2c.tar.gz",
+        "url": "https://github.com/NixOS/nixpkgs/archive/08d3a97586f6b6343b3b5e799980773629432610.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "tmp-postgres": {
@@ -53,10 +53,10 @@
         "homepage": "",
         "owner": "noteed",
         "repo": "tmp-postgres",
-        "rev": "537e707521e420299272a96602cea814dd00d5af",
-        "sha256": "0n31mbp3s6vrq690crkxn9qg7b98rpw3xnwfxppkw13fqwyr6rqz",
+        "rev": "049af45a962dc3ef0affe7b7f219dfe332d253a4",
+        "sha256": "0ngs5l3g1q5xsl9ixsy0l5r492bffr2544wnrdj0h0y392hmjzky",
         "type": "tarball",
-        "url": "https://github.com/noteed/tmp-postgres/archive/537e707521e420299272a96602cea814dd00d5af.tar.gz",
+        "url": "https://github.com/noteed/tmp-postgres/archive/049af45a962dc3ef0affe7b7f219dfe332d253a4.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
